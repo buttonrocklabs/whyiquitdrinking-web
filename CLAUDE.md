@@ -28,41 +28,65 @@ emergency.
 
 ## Project Identity
 
-**Why I Quit Drinking** (whyiquitdrinking.com) is a content/audience property whose
-job is to attract a large organic audience around quitting or questioning
-drinking, and convert that audience into installs of the **Sober Motivation**
-app (sobermotivation.net). It is a joint venture between Greg Falconer and
-Brad McLeod (same partnership structure as SM), tracked in the Lab as its own
-Forge project (`why-i-quit-drinking` / `WIQD`) — not folded into SM's backlog.
-The property may itself be sold once it's built out and loaded with content;
-treat it as a real, standalone asset, not a throwaway funnel page.
+**Why I Quit Drinking** (whyiquitdrinking.com) is a user-generated-content
+property: visitors submit their own "why I quit" story (text + optional
+photo), a moderator approves or rejects it, and approved stories populate a
+public storyboard on the homepage. It is a joint venture between Greg
+Falconer and Brad McLeod (same partnership structure as SM), tracked in the
+Lab as its own Forge project (`why-i-quit-drinking` / `WIQD`) — not folded
+into SM's backlog. The property may itself be sold once it's built out and
+loaded with content; treat it as a real, standalone asset, not a throwaway
+funnel page.
 
-**Why this exists (from research, see the Design System doc for full detail):**
-Facebook groups in this category top out around 60K members — the real reach
-lives in daily-use tools (I Am Sober 16M+ downloads, Reframe 5M+). A content
-site alone doesn't compete; a content site that is the front door to a daily
-habit does. Every page here should either be someone's "why," or a low-friction
-path into the app.
+**Where this came from:** Brad's 09-16-26 check-in with Greg specified this
+directly: a place for people to submit stories and pictures, a moderation
+pass to screen out anything inappropriate, and a big storyboard of the
+approved ones. Brad wants the site NOT branded as or attached to Sober
+Motivation for v1 — it stands on its own.
 
-**Attribution matters.** The whole point of driving traffic here is measurable
-app growth. Any "Get the app" link needs to survive the hop to the App/Play
-Store with the source attached — see `TODO(WIQD)` in `src/pages/Home.tsx` and
-[[WIQD-1 in Forge]] (also flagged as a gap on the `sober-motivation` Forge
-board: no confirmed AppsFlyer OneLink template exists yet for organic/owned
-traffic). Don't wire a raw App Store link into new content pages without
-checking whether OneLink has shipped.
+**SM traffic is secondary, not the hero.** Greg wants a path to Sober
+Motivation preserved regardless. That's a small, clearly-secondary link in
+the footer (`src/components/Footer.tsx`), UTM-tagged
+(`utm_source=whyiquitdrinking&utm_medium=referral&utm_campaign=footer`)
+pointing at sobermotivation.net, which already captures UTM/acquisition
+source on registration. Don't promote it to a hero CTA or add a bare App
+Store link without checking with Greg first — that would contradict Brad's
+framing.
+
+**Architecture decisions locked (2026-09-17, Greg):**
+- **Standalone D1 + R2**, not the shared `brl-platform` used by other BRL
+  apps — this property may be sold on its own later, so its data shouldn't
+  be entangled with the Lab's.
+- **Moderator access is a single shared passphrase**, gated on `/review`
+  (Pages Function checks `Authorization: Bearer <passphrase>` against the
+  `REVIEW_PASSPHRASE` secret). No Clerk accounts for Brad/JB/Shelby in v1.
 
 ## Stack
 
-**What:** Vite + React 19 + TypeScript + Tailwind CSS v4 + React Router v7 (BrowserRouter)
+**What:** Vite + React 19 + TypeScript + Tailwind CSS v4 + React Router v7
+(BrowserRouter), Cloudflare Pages Functions backend, D1 + R2 storage.
 **Entry:** `src/main.tsx` → `src/App.tsx` → routed pages in `src/pages/`
+(`Home` storyboard, `Share` submission form, `Review` moderation queue).
+**Backend:** `functions/api/stories.ts` (GET approved list, POST submit),
+`functions/api/review/pending.ts` + `functions/api/review/[id].ts`
+(passphrase-gated moderation), `functions/media/[[path]].ts` (serves R2
+photos). Shared types/helpers in `functions/_lib.ts`.
+**Data:** D1 database `whyiquitdrinking` (`schema.sql` — single `stories`
+table, status `pending`/`approved`/`rejected`), R2 bucket
+`whyiquitdrinking-media` for photos. Bound in `wrangler.jsonc`.
 **Styles:** `src/index.css` — Tailwind v4 `@theme` tokens, sourced from the
 "Why I Quit Drinking" Design System artifact (colors, type scale, radius).
 Spacing intentionally rides Tailwind's default 4px scale — the design
 system's 8px-based tokens (space-2/4/6/8) already line up with it 1:1.
 **Fonts:** Google Fonts — Fraunces (serif, headlines/pull-quotes only, never below 24px) + Inter (sans, everything else)
 **Path alias:** `@` → `src`
-**Build:** `npm run dev` (port 5051), `npm run build` (→ `/dist`), `npm run preview`
+**Build:** `npm run dev` (Vite only, port 5051), `npm run dev:worker`
+(`wrangler pages dev --proxy 5051` — full stack with D1/R2/secrets, port
+8788; needed to exercise `functions/`), `npm run build` (`tsc -b` covers both
+`src/` and `functions/`, then `vite build` → `/dist`), `npm run preview`.
+**Local secrets:** `.dev.vars` holds `REVIEW_PASSPHRASE` for `dev:worker`
+(gitignored, never commit it). Seed the local D1 emulation once with
+`npx wrangler d1 execute whyiquitdrinking --local --file=schema.sql`.
 
 ## Brand Design System
 
@@ -81,10 +105,12 @@ Tokens live in `src/index.css` under `@theme`. Utility classes: `bg-surface`,
 
 ## What NOT to Do
 
-- Do not add a CMS, database, or backend without instruction — this is a static Pages site.
-- Do not wire a bare App Store/Play Store link into a CTA without checking the OneLink/attribution status first (see above).
+- Do not promote the Sober Motivation link beyond a small, secondary footer mention — Brad's v1 is explicitly not SM-branded.
+- Do not wire a bare App Store/Play Store link into a CTA — SM traffic here goes through the footer link to sobermotivation.net (which already captures UTM), not a raw store link.
+- Do not add Clerk or any per-moderator account system for `/review` without instruction — the shared-passphrase gate is the deliberate v1 choice.
+- Do not fold this project's D1/R2 into the shared `brl-platform` — it's standalone on purpose (possible future resale).
 - Do not hardcode colors — use the `@theme` tokens.
-- Do not invent testimonials or "someone's why" stories and present them as real. Placeholder copy should read as obviously provisional or be pulled from the Design System's own documented samples, never fabricated and attributed to a real person.
+- Do not invent testimonials or "someone's why" stories and present them as real. Seed/placeholder content must be obviously provisional, never fabricated and attributed to a real person.
 - Mobile responsive required.
 
 ## Deploy
@@ -97,6 +123,11 @@ file's writing. See the session handoff notes / Forge item WIQD-1.
 - **Build command:** `npm run build`
 - **Output directory:** `dist`
 - **Production branch:** `main`
+- **D1 + R2 bindings** are already declared in `wrangler.jsonc` (database
+  `whyiquitdrinking`, bucket `whyiquitdrinking-media`) — Cloudflare picks
+  them up once the Pages project exists.
+- **`REVIEW_PASSPHRASE` secret** still needs to be set on the live Pages
+  project once it exists: `npx wrangler pages secret put REVIEW_PASSPHRASE --project-name=whyiquitdrinking-web`.
 - Custom domain (whyiquitdrinking.com) gets added in Cloudflare Pages once the project exists, then DNS at the registrar gets pointed at Cloudflare (same pattern as cozycrates.org — see `cozycrates-website/CLAUDE.md` for the exact DNS-cutover steps if needed).
 
 ## Open Work

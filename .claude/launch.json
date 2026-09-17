@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 5051
+    },
+    {
+      "name": "whyiquitdrinking-web (Pages Worker)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:worker"],
+      "port": 8788
     }
   ]
 }

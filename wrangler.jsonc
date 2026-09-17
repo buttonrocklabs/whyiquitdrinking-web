@@ -1,0 +1,19 @@
+{
+  "name": "whyiquitdrinking-web",
+  "pages_build_output_dir": "./dist",
+  "compatibility_date": "2026-09-17",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "whyiquitdrinking",
+      "database_id": "36723a20-2f0a-4efb-880f-81790097f028"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "whyiquitdrinking-media"
+    }
+  ]
+}
