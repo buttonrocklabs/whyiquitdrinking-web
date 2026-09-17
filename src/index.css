@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+/*
+ * Brand tokens — sourced from the "Why I Quit Drinking" Design System
+ * (terracotta/sage, warm-editorial, not clinical-blue). Colors are
+ * light-theme only for now; there is no dark theme defined yet.
+ * Spacing intentionally uses Tailwind's default 4px scale, which the
+ * design system's 8px-based tokens (space-2/4/6/8) already line up with
+ * 1:1 — no override needed there.
+ */
+@theme {
+  --color-surface: #fbf6ef;
+  --color-surface-raised: #ffffff;
+  --color-line: #e7dccb;
+  --color-line-strong: #9c8865;
+  --color-ink: #241b14;
+  --color-ink-muted: #59493c;
+  --color-brand: #a34a26;
+  --color-brand-soft: #fbe4d6;
+  --color-on-brand: #ffffff;
+  --color-growth: #3c6249;
+  --color-growth-soft: #dceadd;
+  --color-trust: #2c4a52;
+  --color-trust-soft: #dce6e7;
+  --color-on-trust: #ffffff;
+  --color-alert: #8f2e2e;
+  --color-alert-soft: #fde7e7;
+
+  --font-serif: "Fraunces", Georgia, serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  --text-display: 40px;
+  --text-display--line-height: 46px;
+  --text-display--font-weight: 600;
+  --text-display--letter-spacing: -0.01em;
+  --text-h1: 32px;
+  --text-h1--line-height: 40px;
+  --text-h1--font-weight: 600;
+  --text-h1--letter-spacing: -0.01em;
+  --text-h2: 24px;
+  --text-h2--line-height: 32px;
+  --text-h2--font-weight: 600;
+  --text-body-lg: 18px;
+  --text-body-lg--line-height: 28px;
+  --text-body: 16px;
+  --text-body--line-height: 24px;
+  --text-label: 14px;
+  --text-label--line-height: 20px;
+  --text-label--font-weight: 600;
+  --text-caption: 13px;
+  --text-caption--line-height: 18px;
+
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 24px;
+}
+
+@layer base {
+  body {
+    @apply bg-surface text-ink font-sans antialiased;
+  }
+}
