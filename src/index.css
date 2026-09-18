@@ -2,18 +2,24 @@
 
 /*
  * Brand tokens — sourced from the "Why I Quit Drinking" Design System
- * (terracotta/sage, warm-editorial, not clinical-blue). Colors are
- * light-theme only for now; there is no dark theme defined yet.
- * Spacing intentionally uses Tailwind's default 4px scale, which the
- * design system's 8px-based tokens (space-2/4/6/8) already line up with
- * 1:1 — no override needed there.
+ * (terracotta/sage, warm-editorial, not clinical-blue). Spacing
+ * intentionally uses Tailwind's default 4px scale, which the design
+ * system's 8px-based tokens (space-2/4/6/8) already line up with 1:1 —
+ * no override needed there.
+ *
+ * Three selectable homepage themes (WIQD-4), applied via a `data-theme`
+ * attribute on <html> — see src/lib/theme.ts. The base values below ARE
+ * the "corkboard" theme (the default); "feed" and "archive" override the
+ * same variables further down. Every theme must stay genuinely divergent
+ * in color AND type, not just a recolor — see the approved canvas
+ * mockups (Direction1/2/3) for the reference look of each.
  */
 @theme {
-  --color-surface: #fbf6ef;
-  --color-surface-raised: #ffffff;
+  --color-surface: #f2e6d3;
+  --color-surface-raised: #fffdf8;
   --color-line: #e7dccb;
-  --color-line-strong: #9c8865;
-  --color-ink: #241b14;
+  --color-line-strong: #c7b48f;
+  --color-ink: #2c2013;
   --color-ink-muted: #59493c;
   --color-brand: #a34a26;
   --color-brand-soft: #fbe4d6;
@@ -26,8 +32,10 @@
   --color-alert: #8f2e2e;
   --color-alert-soft: #fde7e7;
 
+  /* font-display: the big headline/wordmark face — the most divergent token per theme */
+  --font-display: "Caveat", cursive;
   --font-serif: "Fraunces", Georgia, serif;
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-sans: "Work Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
   --text-display: 40px;
   --text-display--line-height: 46px;
@@ -55,8 +63,62 @@
   --radius-lg: 24px;
 }
 
+/*
+ * "Feed" — dark, bold, native-social. Vertical video-feed energy even
+ * though today's cards only carry text + an optional photo.
+ */
+[data-theme="feed"] {
+  --color-surface: #0b0b0d;
+  --color-surface-raised: #16161a;
+  --color-line: #232323;
+  --color-line-strong: #3a3a3a;
+  --color-ink: #f5f1e8;
+  --color-ink-muted: #9b968c;
+  --color-brand: #ff7a45;
+  --color-brand-soft: #2a1d16;
+  --color-on-brand: #0b0b0d;
+  --color-growth: #6fbf94;
+  --color-growth-soft: #16241d;
+  --color-trust: #16161a;
+  --color-trust-soft: #1c1c1c;
+  --color-on-trust: #f5f1e8;
+  --color-alert: #ff6b6b;
+  --color-alert-soft: #2a1414;
+
+  --font-display: "Space Grotesk", sans-serif;
+  --font-serif: "Space Grotesk", sans-serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+/*
+ * "Archive" — light, restrained, documentary-gallery. A curated shelf of
+ * short films rather than a scrapbook or a feed.
+ */
+[data-theme="archive"] {
+  --color-surface: #faf7f0;
+  --color-surface-raised: #ffffff;
+  --color-line: #e8e2d3;
+  --color-line-strong: #cabfa0;
+  --color-ink: #1d1a15;
+  --color-ink-muted: #726b5c;
+  --color-brand: #2f4a3c;
+  --color-brand-soft: #e7ede9;
+  --color-on-brand: #ffffff;
+  --color-growth: #2f4a3c;
+  --color-growth-soft: #e7ede9;
+  --color-trust: #1d1a15;
+  --color-trust-soft: #e8e2d3;
+  --color-on-trust: #faf7f0;
+  --color-alert: #8f2e2e;
+  --color-alert-soft: #fde7e7;
+
+  --font-display: "Fraunces", Georgia, serif;
+  --font-serif: "Fraunces", Georgia, serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
 @layer base {
   body {
-    @apply bg-surface text-ink font-sans antialiased;
+    @apply bg-surface text-ink font-sans antialiased transition-colors duration-200;
   }
 }
