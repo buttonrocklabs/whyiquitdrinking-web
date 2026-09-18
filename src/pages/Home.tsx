@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import Footer from '@/components/Footer'
+import Hero from '@/components/Hero'
 import NavBar from '@/components/NavBar'
 import StoryCard, { type Story } from '@/components/StoryCard'
+import { useTheme } from '@/lib/theme'
 
 export default function Home() {
+  const theme = useTheme()
   const [stories, setStories] = useState<Story[] | null>(null)
   const [error, setError] = useState(false)
 
@@ -33,20 +35,7 @@ export default function Home() {
       <NavBar />
 
       <main className="flex-1">
-        <section className="mx-auto max-w-3xl px-6 py-20 text-center">
-          <p className="text-label uppercase tracking-[0.1em] text-brand">Real stories, not a treatment brochure</p>
-          <h1 className="mt-4 font-serif text-display text-ink">Why I quit drinking.</h1>
-          <p className="mx-auto mt-6 max-w-xl text-body-lg text-ink-muted">
-            You don't have to hit rock bottom to decide this isn't working for you anymore.
-            Here's why other people decided the same thing, in their own words.
-          </p>
-          <Link
-            to="/share"
-            className="mt-10 inline-block rounded-md bg-brand px-8 py-3 text-label text-on-brand transition-colors hover:bg-brand/90"
-          >
-            Share your why
-          </Link>
-        </section>
+        <Hero storyCount={stories?.length ?? 0} />
 
         <section className="border-t border-line bg-surface-raised">
           <div className="mx-auto max-w-5xl px-6 py-16">
@@ -61,9 +50,15 @@ export default function Home() {
               </p>
             )}
             {stories && stories.length > 0 && (
-              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {stories.map((story) => (
-                  <StoryCard key={story.id} story={story} />
+              <div
+                className={
+                  theme === 'corkboard'
+                    ? 'flex flex-wrap items-start justify-center gap-10'
+                    : 'grid gap-6 sm:grid-cols-2 lg:grid-cols-3'
+                }
+              >
+                {stories.map((story, index) => (
+                  <StoryCard key={story.id} story={story} index={index} />
                 ))}
               </div>
             )}
