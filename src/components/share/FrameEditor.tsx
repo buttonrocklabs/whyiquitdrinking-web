@@ -6,6 +6,8 @@ import type { PhotoEntry } from './types'
 const ZOOM_STEP = 0.25
 const KEY_MOVE = 0.06 // of the visible area per arrow press
 const WHEEL_SPEED = 0.002
+// A trackpad pinch arrives as wheel events with ctrlKey set and small deltas, so it needs a larger step.
+const PINCH_SPEED = 0.01
 
 type Gesture =
   | { kind: 'pan'; x: number; y: number; view: FrameView }
@@ -16,9 +18,9 @@ const ROUND_BUTTON =
 
 /**
  * Drag-to-frame editor for one photo. The viewport has the board's aspect and the photo
- * always covers it. Drag (or one finger) moves, the slider, the buttons, the wheel or a
- * two-finger pinch zoom, and with the viewport focused the arrow keys move and plus and
- * minus zoom. The view is kept as fractions of the photo, so it bakes the same at any size.
+ * always covers it. Drag (or one finger) moves, the slider, the buttons, a trackpad pinch, Ctrl or
+ * Command with the wheel, or a two-finger touch pinch zoom, and with the viewport focused the
+ * arrow keys move and plus and minus zoom. A plain scroll over the frame still scrolls the page. The view is kept as fractions of the photo, so it bakes the same at any size.
  */
 export default function FrameEditor({
   entry,
@@ -61,10 +63,16 @@ export default function FrameEditor({
     if (!element) return
     // Not a React prop: React registers wheel listeners as passive, which cannot stop the page scrolling.
     function onWheel(event: WheelEvent) {
+      // Only a deliberate zoom is taken: a trackpad pinch (ctrlKey) or Ctrl or Command with the wheel.
+      // Anything else is the visitor scrolling past the frame, so the page gets it.
+      if (!event.ctrlKey && !event.metaKey) return
       event.preventDefault()
       const { view: now, onView: emit, disabled: off } = latest.current
       if (off) return
-      emit(clampView({ ...now, zoom: now.zoom * Math.exp(-event.deltaY * WHEEL_SPEED) }, width, height, aspect))
+      // Some mice report lines or pages instead of pixels.
+      const pixels = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 400 : 1)
+      const speed = event.ctrlKey ? PINCH_SPEED : WHEEL_SPEED
+      emit(clampView({ ...now, zoom: now.zoom * Math.exp(-pixels * speed) }, width, height, aspect))
     }
     element.addEventListener('wheel', onWheel, { passive: false })
     return () => element.removeEventListener('wheel', onWheel)
