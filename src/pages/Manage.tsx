@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import Footer from '@/components/Footer'
 import NavBar from '@/components/NavBar'
@@ -6,6 +6,8 @@ import StoryCard, { type Story as StoryData } from '@/components/StoryCard'
 import { useTheme } from '@/lib/theme'
 
 type Action = 'photos' | 'story'
+/** What the server says is now true, which can differ from the action asked for (a stale tab). */
+type RemovalState = 'photos_removed' | 'story_removed'
 type Status = 'pending' | 'approved' | 'rejected' | 'withdrawn'
 
 interface Summary {
@@ -49,10 +51,31 @@ const ACTIONS: Record<
   },
 }
 
-const SERVER_ERROR = "That didn't go through. Nothing was removed, so please try again."
+// True whether the request failed before or after anything was taken down; a retry is safe either way.
+const SERVER_ERROR = "That didn't finish. Please try again."
 
 function longDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { dateStyle: 'long' })
+}
+
+/** The page as the server's reply to a removal says it now is, until the next read confirms it. */
+function afterRemoval(summary: Summary, state: RemovalState, action: Action, at: string): Summary {
+  if (state === 'story_removed') {
+    // The date is only known to be today when this request is the one that removed it.
+    return {
+      ...summary,
+      status: 'withdrawn',
+      hasPhotos: false,
+      storyRemovedOn: action === 'story' ? at : null,
+      story: null,
+    }
+  }
+  return {
+    ...summary,
+    hasPhotos: false,
+    photosRemovedOn: at,
+    story: summary.story && { ...summary.story, photoUrl: null, photos: [] },
+  }
 }
 
 /** The link is the only credential: keep the page out of search results and out of Referer headers. */
@@ -88,6 +111,22 @@ function RemoveAction({
   onConfirm: () => void
 }) {
   const copy = ACTIONS[action]
+  const openerRef = useRef<HTMLButtonElement>(null)
+  const cancelRef = useRef<HTMLButtonElement>(null)
+  // Set only by Cancel, so a confirm that closes because the removal finished never grabs focus.
+  const returnFocus = useRef(false)
+
+  // The question opens in place of the button that was pressed, so focus follows it: onto the safe
+  // choice when it opens, and back onto the opener when it is cancelled.
+  useEffect(() => {
+    if (open) {
+      cancelRef.current?.focus()
+    } else if (returnFocus.current) {
+      returnFocus.current = false
+      openerRef.current?.focus()
+    }
+  }, [open])
+
   return (
     <div className="rounded-md border border-line bg-surface-raised p-6">
       <h2 className="font-serif text-h2 text-ink">{copy.title}</h2>
@@ -106,8 +145,12 @@ function RemoveAction({
                 {busy ? 'Removing' : 'Yes, remove'}
               </button>
               <button
+                ref={cancelRef}
                 type="button"
-                onClick={onCancel}
+                onClick={() => {
+                  returnFocus.current = true
+                  onCancel()
+                }}
                 disabled={busy}
                 className="rounded-md border border-line-strong px-4 py-2 text-label text-ink transition-colors hover:bg-surface disabled:opacity-60"
               >
@@ -117,9 +160,11 @@ function RemoveAction({
           </div>
         ) : (
           <button
+            ref={openerRef}
             type="button"
             onClick={onOpen}
-            className="w-full rounded-md border border-line-strong px-4 py-2 text-label text-ink transition-colors hover:bg-surface sm:w-auto"
+            disabled={busy}
+            className="w-full rounded-md border border-line-strong px-4 py-2 text-label text-ink transition-colors hover:bg-surface disabled:opacity-60 sm:w-auto"
           >
             {copy.button}
           </button>
@@ -144,6 +189,8 @@ export default function Manage() {
 
   useEffect(() => {
     let cancelled = false
+    // After a removal the page already shows the server's answer; this read only confirms it.
+    const quiet = version > 0
 
     fetch(`/api/manage/${encodeURIComponent(token)}`)
       .then(async (res): Promise<Result> => {
@@ -153,7 +200,11 @@ export default function Manage() {
       })
       .catch((): Result => ({ token, kind: 'error' }))
       .then((next) => {
-        if (!cancelled) setResult(next)
+        if (cancelled) return
+        // A quiet read that fails must not replace a removal that just succeeded with a load error.
+        setResult((previous) =>
+          quiet && next.kind !== 'ready' && previous?.token === token && previous.kind === 'ready' ? previous : next
+        )
       })
 
     return () => {
@@ -171,7 +222,17 @@ export default function Manage() {
         body: JSON.stringify({ action }),
       })
       if (!res.ok) throw new Error('remove failed')
-      setMessage(ACTIONS[action].done)
+      const reply = (await res.json()) as { state?: unknown }
+      if (reply.state !== 'photos_removed' && reply.state !== 'story_removed') throw new Error('unexpected reply')
+      const state: RemovalState = reply.state
+      const at = new Date().toISOString()
+      // Show what the server says is now true right away, then read it again to confirm.
+      setResult((previous) =>
+        previous?.token === token && previous.kind === 'ready'
+          ? { ...previous, summary: afterRemoval(previous.summary, state, action, at) }
+          : previous
+      )
+      setMessage(state === 'photos_removed' ? ACTIONS.photos.done : '')
       setConfirming(null)
       setVersion((current) => current + 1)
     } catch {
@@ -204,7 +265,8 @@ export default function Manage() {
             <div className="mt-6">
               <p className="text-body-lg text-ink">We couldn't find that link.</p>
               <p className="mt-2 text-body text-ink-muted">
-                Check that the whole link was copied, or look for the email we sent when you shared your story.
+                Check that the whole link was copied, or look for the email or the link we showed you when you
+                shared your story.
               </p>
               <Link to="/" className="mt-4 inline-block text-label text-brand underline">
                 Back to the storyboard
@@ -235,7 +297,8 @@ export default function Manage() {
                   Your photos were removed on {longDate(photosGoneOn)}.
                 </p>
               ) : (
-                message && (
+                message &&
+                !removed && (
                   <p role="status" className="mt-4 text-body text-ink">
                     {message}
                   </p>
