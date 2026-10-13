@@ -1,6 +1,8 @@
 import { PAIR_ERRORS, checkPair, takenOnValue } from '../../../shared/pair'
 import { modeOf, slotsOf, STEPS, type FlowData, type StepId } from './types'
 
+export const PREPARING_PHOTO = 'Hang on, still preparing your photo.'
+
 /** The real pair check, with the visitor's own photos, dates, email and 18+ answer. */
 function pairProblem(data: FlowData): string | null {
   return checkPair({
@@ -40,7 +42,10 @@ export function stepProblem(step: StepId, data: FlowData): string | null {
   const mode = modeOf(data)
   switch (step) {
     case 'photos': {
-      const missing = slotsOf(mode).some((key) => data.photos[key] === null)
+      const slots = slotsOf(mode)
+      // A photo still being cleaned has no framed entry yet, or is about to replace the one shown.
+      if (slots.some((key) => data.cleaning[key])) return PREPARING_PHOTO
+      const missing = slots.some((key) => data.photos[key] === null)
       if (!missing) return null
       return mode === 'pair' ? 'Add both photos to continue.' : 'Add a photo to continue.'
     }

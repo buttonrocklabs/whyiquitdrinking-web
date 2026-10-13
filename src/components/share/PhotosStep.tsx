@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { PHOTO_HELP } from '@/lib/photo'
 import { PHOTO_ERRORS } from '../../../shared/pair'
 import PhotoSlot from './PhotoSlot'
@@ -16,41 +16,38 @@ const SLOT_LABELS: Record<PhotoKey, string> = { before: 'Before', after: 'After'
 export default function PhotosStep({
   data,
   onChoice,
-  onPhoto,
+  onBeginPick,
+  onFinishPick,
+  onRemove,
   onSkip,
 }: {
   data: FlowData
   onChoice: (choice: 'pair' | 'single') => void
-  onPhoto: (key: PhotoKey, entry: PhotoEntry | null) => void
+  /** Marks a slot as being cleaned and returns the ticket its result must present. */
+  onBeginPick: (key: PhotoKey) => number
+  /** Lands a result (null for a refusal). False means the ticket was stale and nothing changed. */
+  onFinishPick: (key: PhotoKey, ticket: number, entry: PhotoEntry | null) => boolean
+  onRemove: (key: PhotoKey) => void
   onSkip: () => void
 }) {
-  const [cleaning, setCleaning] = useState<Record<PhotoKey, boolean>>({ before: false, after: false, single: false })
   const [errors, setErrors] = useState<Record<PhotoKey, string>>({ before: '', after: '', single: '' })
-  // Counts picks per slot, so a slow earlier pick cannot land after a newer one.
-  const picks = useRef<Record<PhotoKey, number>>({ before: 0, after: 0, single: 0 })
 
   async function pick(key: PhotoKey, file: File) {
-    const mine = ++picks.current[key]
     setErrors((prev) => ({ ...prev, [key]: '' }))
-    setCleaning((prev) => ({ ...prev, [key]: true }))
+    const ticket = onBeginPick(key)
     try {
-      const entry = await loadPhoto(file)
-      if (mine === picks.current[key]) onPhoto(key, entry)
+      onFinishPick(key, ticket, await loadPhoto(file))
     } catch (error) {
       // A refusal keeps whatever the slot held before and says why in the slot.
-      if (mine === picks.current[key]) {
+      if (onFinishPick(key, ticket, null)) {
         setErrors((prev) => ({ ...prev, [key]: error instanceof PhotoRefused ? error.message : PHOTO_ERRORS.type }))
       }
-    } finally {
-      if (mine === picks.current[key]) setCleaning((prev) => ({ ...prev, [key]: false }))
     }
   }
 
   function remove(key: PhotoKey) {
-    picks.current[key]++
     setErrors((prev) => ({ ...prev, [key]: '' }))
-    setCleaning((prev) => ({ ...prev, [key]: false }))
-    onPhoto(key, null)
+    onRemove(key)
   }
 
   const slots = slotsOf(data.choice)
@@ -86,7 +83,7 @@ export default function PhotosStep({
             label={SLOT_LABELS[key]}
             aspectClass={key === 'single' ? 'aspect-[4/3]' : 'aspect-[3/4]'}
             file={data.photos[key]?.clean ?? null}
-            cleaning={cleaning[key]}
+            cleaning={data.cleaning[key]}
             error={errors[key]}
             onFile={(file) => pick(key, file)}
             onRemove={() => remove(key)}

@@ -2,7 +2,8 @@ import { checkPair, takenOnValue } from '../../../shared/pair'
 import { modeOf, type FlowData } from './types'
 
 export const SERVER_ERROR = 'Something went wrong. Try again.'
-export const MISSING_PHOTO = 'One of the photos still needs framing. Go back one step to frame it.'
+export const MISSING_PHOTO = 'One of your photos still needs framing. Go to the frame step to finish it.'
+export const NO_PHOTO = 'A photo is missing. Go to the photos step to add it.'
 
 /**
  * Built from flow state, field for field as the old single-page form built it, so the
@@ -36,6 +37,7 @@ export function buildBody(data: FlowData): FormData {
 export function submitProblem(data: FlowData): string | null {
   const mode = modeOf(data)
   const slots = mode === 'pair' ? (['before', 'after'] as const) : mode === 'single' ? (['single'] as const) : []
+  if (slots.some((key) => data.photos[key] === null)) return NO_PHOTO
   if (slots.some((key) => !data.photos[key]?.baked)) return MISSING_PHOTO
   if (mode !== 'pair') return null
   return checkPair({

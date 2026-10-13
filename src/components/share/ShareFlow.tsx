@@ -10,7 +10,7 @@ import PrivacyStep from './PrivacyStep'
 import ReviewStep from './ReviewStep'
 import StoryStep from './StoryStep'
 import { bakePhotos } from './loadPhoto'
-import { buildBody, sendStory, submitProblem } from './submit'
+import { MISSING_PHOTO, NO_PHOTO, buildBody, sendStory, submitProblem } from './submit'
 import { slotsOf, type Mode, type StepId } from './types'
 import { useShareFlow } from './useShareFlow'
 import { stepAtDepth, useStepHistory } from './useStepHistory'
@@ -131,6 +131,9 @@ export default function ShareFlow() {
 
   const problem = stepProblem(step, data)
   const isServerPhotoError = (Object.values(PHOTO_ERRORS) as string[]).includes(error)
+  // A photo problem found at the final step comes with a button straight to the step that fixes it.
+  const fixStep: StepId | null = error === MISSING_PHOTO ? 'frame' : error === NO_PHOTO || isServerPhotoError ? 'photos' : null
+  const fixLabel = error === MISSING_PHOTO ? 'Go to the frame step' : error === NO_PHOTO ? 'Go to the photos step' : 'Change photos'
 
   return (
     <div className="mx-auto w-full max-w-xl px-3 py-6 sm:px-6 sm:py-10">
@@ -150,7 +153,14 @@ export default function ShareFlow() {
             {titleFor(step, mode)}
           </h1>
           {step === 'photos' && (
-            <PhotosStep data={data} onChoice={(choice) => flow.patch({ choice })} onPhoto={flow.setPhoto} onSkip={flow.skipPhotos} />
+            <PhotosStep
+              data={data}
+              onChoice={(choice) => flow.patch({ choice })}
+              onBeginPick={flow.beginPick}
+              onFinishPick={flow.finishPick}
+              onRemove={flow.removePhoto}
+              onSkip={flow.skipPhotos}
+            />
           )}
           {step === 'frame' && <FrameStep data={data} busy={busy} onView={flow.setView} />}
           {step === 'dates' && <DatesStep data={data} onDate={flow.setDate} />}
@@ -165,13 +175,13 @@ export default function ShareFlow() {
           reason={busy || submitting ? null : problem}
           error={error}
           errorAction={
-            isServerPhotoError && (
+            fixStep && (
               <button
                 type="button"
-                onClick={() => handleEdit('photos')}
+                onClick={() => handleEdit(fixStep)}
                 className="min-h-11 cursor-pointer rounded-md border border-line bg-surface-raised px-4 text-label text-ink transition-colors hover:bg-surface"
               >
-                Change photos
+                {fixLabel}
               </button>
             )
           }

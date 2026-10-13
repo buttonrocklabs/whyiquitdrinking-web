@@ -30,6 +30,8 @@ export interface FlowData {
   skipped: boolean
   /** Kept for all three slots at all times; only the active mode's slots are shown and sent. */
   photos: Record<PhotoKey, PhotoEntry | null>
+  /** Slots whose picked file is still being cleaned. Continue on the photos step waits for these. */
+  cleaning: Record<PhotoKey, boolean>
   dates: Record<'before' | 'after', MonthYear>
   story: string
   shareName: boolean
@@ -47,6 +49,7 @@ export const EMPTY_FLOW: FlowData = {
   choice: 'pair',
   skipped: false,
   photos: { before: null, after: null, single: null },
+  cleaning: { before: false, after: false, single: false },
   dates: { before: { year: '', month: '' }, after: { year: '', month: '' } },
   story: '',
   shareName: false,
