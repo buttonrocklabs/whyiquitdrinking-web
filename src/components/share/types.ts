@@ -87,6 +87,36 @@ export function newEntry(clean: File, width: number, height: number): PhotoEntry
 }
 
 export const STORY_MAX_CHARS = 4000
+
+/**
+ * The story's length as the server counts it. The upload is multipart, which sends every line break as
+ * CRLF, so each "\n" in the field is two characters on the wire. The server rejects more than
+ * STORY_MAX_CHARS of those, so the field is held to the same count.
+ */
+export function storyLength(text: string): number {
+  let length = text.length
+  for (let index = 0; index < text.length; index++) if (text[index] === '\n') length++
+  return length
+}
+
+/**
+ * Fits an edited story back under the limit the way a maxLength would: the surplus comes off the end of
+ * what was just typed or pasted (the text before the caret), so text further on is never lost. Returns
+ * the text and where the caret belongs in it.
+ */
+export function fitStory(raw: string, caret: number): { text: string; caret: number } {
+  let excess = storyLength(raw) - STORY_MAX_CHARS
+  if (excess <= 0) return { text: raw, caret }
+  let cut = Math.min(caret, raw.length)
+  while (cut > 0 && excess > 0) {
+    cut--
+    excess -= raw[cut] === '\n' ? 2 : 1
+  }
+  // Never leave the first half of an emoji behind.
+  const before = cut > 0 ? raw.charCodeAt(cut - 1) : 0
+  if (before >= 0xd800 && before <= 0xdbff) cut--
+  return { text: raw.slice(0, cut) + raw.slice(Math.min(caret, raw.length)), caret: cut }
+}
 export const NAME_MAX_CHARS = 100
 
 export const MONTHS = [

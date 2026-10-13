@@ -1,7 +1,7 @@
-import { useId, useLayoutEffect, useRef } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, type ChangeEvent } from 'react'
 import PhotoThumb from './PhotoThumb'
 import SwitchRow from './SwitchRow'
-import { NAME_MAX_CHARS, STORY_MAX_CHARS, modeOf, type FlowData } from './types'
+import { NAME_MAX_CHARS, STORY_MAX_CHARS, fitStory, modeOf, storyLength, type FlowData } from './types'
 
 const FIELD_CLASS = 'min-h-11 w-full rounded-md border border-line bg-surface-raised px-4 py-2 text-body text-ink'
 
@@ -23,6 +23,12 @@ function Thumbs({ data }: { data: FlowData }) {
   return null
 }
 
+/** Resizes the field to its text: reset to auto first so the box can shrink as well as grow. */
+function grow(area: HTMLTextAreaElement) {
+  area.style.height = 'auto'
+  area.style.height = `${area.scrollHeight}px`
+}
+
 /** Step 4: the story in an auto-growing field, with the first-name switch below it. */
 export default function StoryStep({
   data,
@@ -33,14 +39,48 @@ export default function StoryStep({
 }) {
   const areaRef = useRef<HTMLTextAreaElement>(null)
   const countId = useId()
+  // Where the caret goes after a change was cut down to fit; null when the text went in as typed.
+  const caret = useRef<number | null>(null)
 
-  // Grow with the text: reset to auto first so the box can shrink as well as grow.
+  // Grow with the text, and put the caret back after a change was cut down to fit the limit.
   useLayoutEffect(() => {
     const area = areaRef.current
     if (!area) return
-    area.style.height = 'auto'
-    area.style.height = `${area.scrollHeight}px`
+    grow(area)
+    if (caret.current !== null) {
+      area.setSelectionRange(caret.current, caret.current)
+      caret.current = null
+    }
   }, [data.story])
+
+  // The field hides overflow, so a change of width (rotating a phone, resizing a window) re-wraps the
+  // text and has to resize it too, or the last lines are cut off.
+  useEffect(() => {
+    const area = areaRef.current
+    if (!area || typeof ResizeObserver === 'undefined') return
+    let width = area.clientWidth
+    const watcher = new ResizeObserver(() => {
+      // Growing changes the height only, so waiting for a new width keeps this from feeding itself.
+      if (area.clientWidth === width) return
+      width = area.clientWidth
+      grow(area)
+    })
+    watcher.observe(area)
+    return () => watcher.disconnect()
+  }, [])
+
+  function handleStory(event: ChangeEvent<HTMLTextAreaElement>) {
+    const area = event.target
+    const { text, caret: at } = fitStory(area.value, area.selectionStart)
+    caret.current = null
+    if (text !== area.value) {
+      if (text !== data.story) caret.current = at
+      // Nothing changed in state (the keystroke was cut off whole), so React puts the old text back
+      // and the caret at its end; move it back once that has happened.
+      else queueMicrotask(() => area.setSelectionRange(at, at))
+    }
+    onChange({ story: text })
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -56,15 +96,14 @@ export default function StoryStep({
             ref={areaRef}
             id="story_text"
             rows={5}
-            maxLength={STORY_MAX_CHARS}
             value={data.story}
-            onChange={(event) => onChange({ story: event.target.value })}
+            onChange={handleStory}
             placeholder="What made you decide to quit?"
             aria-describedby={countId}
             className={`${FIELD_CLASS} resize-none overflow-hidden`}
           />
           <p id={countId} className="text-right text-caption text-ink-muted">
-            {data.story.length} of {STORY_MAX_CHARS}
+            {storyLength(data.story)} of {STORY_MAX_CHARS}
           </p>
         </div>
       </div>
