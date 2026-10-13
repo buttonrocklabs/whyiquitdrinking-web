@@ -6,6 +6,7 @@ import {
   type ConsentKey,
 } from '../../shared/consent'
 import { PAIR_ERRORS, checkPair, hasPairInput } from '../../shared/pair'
+import { manageLinkEmail } from '../_emails'
 import {
   hashToken,
   json,
@@ -13,6 +14,7 @@ import {
   photoUrl,
   photosByStory,
   readPhoto,
+  sendEmail,
   type Env,
   type PhotoRow,
   type StoryRow,
@@ -68,7 +70,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
   })
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestPost: PagesFunction<Env> = async ({ request, env, waitUntil }) => {
   const form = await request.formData()
 
   // Honeypot: a real visitor never fills this field (hidden off-screen). The
@@ -202,6 +204,17 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       console.error('story photo cleanup failed', cleanupError)
     }
     return json({ ok: false, error: 'Something went wrong. Try again.' }, { status: 500 })
+  }
+
+  // The private link goes to the contributor's email when one was given (a photo pair
+  // always has one). The send runs after the response and logs its own failure, so a
+  // mail problem never turns a stored story into an error.
+  if (hasPair) {
+    waitUntil(
+      sendEmail(env, { to: email, ...manageLinkEmail(env, manageToken) }).catch((error) =>
+        console.error('story submit: manage link email failed', error)
+      )
+    )
   }
 
   return json({ ok: true, id, manageToken }, { status: 201 })

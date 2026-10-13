@@ -4,14 +4,25 @@ export interface Env {
   DB: D1Database
   MEDIA: R2Bucket
   REVIEW_PASSPHRASE: string
+  // Brevo transactional email (WIQD-16). All optional: with no key or no FROM
+  // address, sendEmail skips the send. Pages secrets, production only.
+  BREVO_API_KEY?: string
+  BREVO_FROM_EMAIL?: string
+  BREVO_FROM_NAME?: string
+  BREVO_REPLY_TO?: string
+  /** Where a removal notice goes, so someone can take down any pin made from the story. */
+  WITHDRAW_NOTIFY_EMAIL?: string
 }
+
+/** Fixed base for links in email, so a link made on a preview deploy still points at the live site. */
+export const SITE_URL = 'https://whyiquitdrinking.com'
 
 export interface StoryRow {
   id: string
   display_name: string | null
   story_text: string
   photo_key: string | null
-  status: 'pending' | 'approved' | 'rejected'
+  status: 'pending' | 'approved' | 'rejected' | 'withdrawn'
   consent_given: number
   submitted_at: string
   reviewed_at: string | null
@@ -118,4 +129,60 @@ export function json(data: unknown, init?: ResponseInit): Response {
     ...init,
     headers: { 'content-type': 'application/json', ...init?.headers },
   })
+}
+
+export interface EmailMessage {
+  to: string
+  subject: string
+  /** Plain-text body. Always sent. */
+  text: string
+  /** HTML body, when the message needs a real link or paragraphs. */
+  html?: string
+}
+
+/**
+ * Sends one email through Brevo. The only place mail leaves the app, so Cloudflare
+ * Email Service can replace it later without touching a caller.
+ *
+ * With no BREVO_API_KEY or no BREVO_FROM_EMAIL it logs one warning and returns, so a
+ * preview deploy or a local run just sends nothing. A failed send throws; callers hand
+ * it to waitUntil with a .catch so mail never blocks or fails a request.
+ */
+export async function sendEmail(env: Env, message: EmailMessage): Promise<void> {
+  if (!env.BREVO_API_KEY || !env.BREVO_FROM_EMAIL) {
+    console.warn('sendEmail skipped: BREVO_API_KEY or BREVO_FROM_EMAIL is not set')
+    return
+  }
+
+  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'api-key': env.BREVO_API_KEY,
+      'content-type': 'application/json',
+      accept: 'application/json',
+    },
+    body: JSON.stringify({
+      sender: { name: env.BREVO_FROM_NAME || 'Why I Quit Drinking', email: env.BREVO_FROM_EMAIL },
+      to: [{ email: message.to }],
+      ...(env.BREVO_REPLY_TO ? { replyTo: { email: env.BREVO_REPLY_TO } } : {}),
+      subject: message.subject,
+      textContent: message.text,
+      ...(message.html ? { htmlContent: message.html } : {}),
+    }),
+  })
+
+  if (!response.ok) {
+    // The status and Brevo's own reason are enough to debug; the recipient stays out of the log.
+    const body = await response.text()
+    throw new Error(`Brevo send failed: ${response.status} ${body.slice(0, 200)}`)
+  }
+}
+
+/** Escapes text for an HTML email body. */
+export function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
 }
