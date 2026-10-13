@@ -436,7 +436,10 @@ export default function Share() {
                   <input
                     id="email"
                     name="email"
-                    type="email"
+                    // A closed <details> hides this input, and the browser refuses to submit over an
+                    // invalid control it cannot focus, with no message. Type validation applies only
+                    // while the section is open. Closed, the pair is not sent, so nothing to check.
+                    type={pairOpen ? 'email' : 'text'}
                     maxLength={254}
                     autoComplete="email"
                     value={pair.email}
