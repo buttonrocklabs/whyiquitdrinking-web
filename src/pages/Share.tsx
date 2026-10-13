@@ -2,9 +2,11 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'rea
 import { useSearchParams } from 'react-router-dom'
 import Footer from '@/components/Footer'
 import NavBar from '@/components/NavBar'
+import { isHeicFile, prepareImage } from '@/lib/photo'
 import { CONSENT_LABELS, CONSENT_NOTE } from '../../shared/consent'
 import {
   MAX_PHOTO_BYTES,
+  MAX_SOURCE_BYTES,
   PAIR_MIN_YEAR,
   PHOTO_ERRORS,
   checkPair,
@@ -14,7 +16,10 @@ import {
 type SubmitState = 'idle' | 'submitting' | 'done' | 'error'
 
 const PHOTO_ACCEPT = 'image/jpeg,image/png,image/webp'
+const PHOTO_HELP = 'JPEG, PNG or WebP. We remove location data and shrink large photos for you.'
 const SERVER_ERROR = 'Something went wrong. Try again.'
+
+type PhotoSlot = 'before' | 'after' | 'single'
 
 const MONTHS = [
   'January',
@@ -97,6 +102,7 @@ function PhotoField({
   label,
   month,
   year,
+  inputKey,
   onFile,
   onMonth,
   onYear,
@@ -105,6 +111,7 @@ function PhotoField({
   label: string
   month: string
   year: string
+  inputKey: number
   onFile: (file: File | null) => void
   onMonth: (month: string) => void
   onYear: (year: string) => void
@@ -116,6 +123,8 @@ function PhotoField({
           {label}
         </label>
         <input
+          // A new key mounts a fresh, empty picker, which is how a refused photo gets cleared.
+          key={inputKey}
           id={`${kind}_photo`}
           name={`${kind}_photo`}
           type="file"
@@ -176,6 +185,11 @@ export default function Share() {
   const [website, setWebsite] = useState('')
   const [pairOpen, setPairOpen] = useState(wantsPair)
   const [pair, setPair] = useState<PairState>(EMPTY_PAIR)
+  const [pickerKeys, setPickerKeys] = useState<Record<PhotoSlot, number>>({
+    before: 0,
+    after: 0,
+    single: 0,
+  })
 
   function patchPair(patch: Partial<PairState>) {
     setPair((prev) => ({ ...prev, ...patch }))
@@ -201,6 +215,34 @@ export default function Share() {
   function fail(message: string) {
     setErrorMessage(message)
     setState('error')
+  }
+
+  // A refused photo leaves both the form state and its file picker, so the visitor picks another.
+  function dropPhoto(slot: PhotoSlot) {
+    if (slot === 'single') setSinglePhoto(null)
+    else patchPair(slot === 'before' ? { before: null } : { after: null })
+    setPickerKeys((prev) => ({ ...prev, [slot]: prev[slot] + 1 }))
+  }
+
+  // Redraws one photo as a clean JPEG (no location or camera data) and checks its new size.
+  // On any refusal it shows the message, drops the photo and reports false; the original
+  // file is never what gets sent.
+  async function cleanPhoto(slot: PhotoSlot, file: File | null): Promise<File | null | false> {
+    if (!file) return null
+    let clean: File
+    try {
+      clean = await prepareImage(file)
+    } catch {
+      dropPhoto(slot)
+      fail(isHeicFile(file) ? PHOTO_ERRORS.heic : PHOTO_ERRORS.type)
+      return false
+    }
+    if (clean.size > MAX_PHOTO_BYTES) {
+      dropPhoto(slot)
+      fail(PHOTO_ERRORS.size)
+      return false
+    }
+    return clean
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -231,12 +273,30 @@ export default function Share() {
         now: new Date(),
       })
       if (problem) return fail(problem)
-      if ((pair.before?.size ?? 0) > MAX_PHOTO_BYTES || (pair.after?.size ?? 0) > MAX_PHOTO_BYTES) {
-        return fail(PHOTO_ERRORS.size)
-      }
-    } else if ((singlePhoto?.size ?? 0) > MAX_PHOTO_BYTES) {
-      return fail(PHOTO_ERRORS.size)
     }
+
+    // Source cap first, before anything is decoded. What goes out is the re-encoded copy,
+    // which the function still holds to MAX_PHOTO_BYTES.
+    const picked: [PhotoSlot, File | null][] = sendPair
+      ? [
+          ['before', pair.before],
+          ['after', pair.after],
+        ]
+      : [['single', singlePhoto]]
+    for (const [slot, file] of picked) {
+      if (file && file.size > MAX_SOURCE_BYTES) {
+        dropPhoto(slot)
+        return fail(PHOTO_ERRORS.sourceSize)
+      }
+    }
+
+    // One at a time keeps a pair of large photos from sitting decoded in memory together.
+    const before = sendPair ? await cleanPhoto('before', pair.before) : null
+    if (before === false) return
+    const after = sendPair ? await cleanPhoto('after', pair.after) : null
+    if (after === false) return
+    const photo = sendPair ? null : await cleanPhoto('single', singlePhoto)
+    if (photo === false) return
 
     // Built from state, not from the DOM form: a closed <details> still submits its fields.
     const body = new FormData()
@@ -245,16 +305,16 @@ export default function Share() {
     body.set('story_text', storyText)
     body.set('consent', siteConsent ? 'true' : 'false')
     if (sendPair) {
-      if (pair.before) body.set('before_photo', pair.before)
-      if (pair.after) body.set('after_photo', pair.after)
+      if (before) body.set('before_photo', before)
+      if (after) body.set('after_photo', after)
       body.set('before_taken_on', beforeTakenOn)
       body.set('after_taken_on', afterTakenOn)
       body.set('email', pair.email.trim())
       body.set('adult', pair.adult ? 'true' : 'false')
       if (pair.pins) body.set('pins', 'true')
       if (pair.smBoard) body.set('sm_board', 'true')
-    } else if (singlePhoto) {
-      body.set('photo', singlePhoto)
+    } else if (photo) {
+      body.set('photo', photo)
     }
 
     try {
@@ -367,6 +427,7 @@ export default function Share() {
                   Photo (optional)
                 </label>
                 <input
+                  key={pickerKeys.single}
                   id="photo"
                   name="photo"
                   type="file"
@@ -374,7 +435,7 @@ export default function Share() {
                   onChange={(event) => setSinglePhoto(event.target.files?.[0] ?? null)}
                   className="text-body text-ink-muted"
                 />
-                <p className="text-caption text-ink-muted">JPEG, PNG or WebP, up to 8MB.</p>
+                <p className="text-caption text-ink-muted">{PHOTO_HELP}</p>
               </div>
             )}
 
@@ -413,6 +474,7 @@ export default function Share() {
                     label="Before photo"
                     month={pair.beforeMonth}
                     year={pair.beforeYear}
+                    inputKey={pickerKeys.before}
                     onFile={(file) => patchPair({ before: file })}
                     onMonth={(month) => patchPair({ beforeMonth: month })}
                     onYear={(year) => patchPair({ beforeYear: year })}
@@ -422,12 +484,13 @@ export default function Share() {
                     label="After photo"
                     month={pair.afterMonth}
                     year={pair.afterYear}
+                    inputKey={pickerKeys.after}
                     onFile={(file) => patchPair({ after: file })}
                     onMonth={(month) => patchPair({ afterMonth: month })}
                     onYear={(year) => patchPair({ afterYear: year })}
                   />
                 </div>
-                <p className="-mt-3 text-caption text-ink-muted">JPEG, PNG or WebP, up to 8MB each.</p>
+                <p className="-mt-3 text-caption text-ink-muted">{PHOTO_HELP}</p>
 
                 <div className="flex flex-col gap-2">
                   <label htmlFor="email" className="text-label text-ink">
