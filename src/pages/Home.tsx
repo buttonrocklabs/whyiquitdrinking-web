@@ -3,10 +3,8 @@ import Footer from '@/components/Footer'
 import Hero from '@/components/Hero'
 import NavBar from '@/components/NavBar'
 import StoryCard, { type Story } from '@/components/StoryCard'
-import { useTheme } from '@/lib/theme'
 
 export default function Home() {
-  const theme = useTheme()
   const [stories, setStories] = useState<Story[] | null>(null)
   const [error, setError] = useState(false)
 
@@ -50,13 +48,7 @@ export default function Home() {
               </p>
             )}
             {stories && stories.length > 0 && (
-              <div
-                className={
-                  theme === 'corkboard'
-                    ? 'flex flex-wrap items-start justify-center gap-10'
-                    : 'grid gap-6 sm:grid-cols-2 lg:grid-cols-3'
-                }
-              >
+              <div className="flex flex-wrap items-start justify-center gap-10">
                 {stories.map((story, index) => (
                   <StoryCard key={story.id} story={story} index={index} />
                 ))}

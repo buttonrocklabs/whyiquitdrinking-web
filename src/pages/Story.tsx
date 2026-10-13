@@ -3,7 +3,6 @@ import { Link, useParams } from 'react-router-dom'
 import Footer from '@/components/Footer'
 import NavBar from '@/components/NavBar'
 import StoryCard, { type Story as StoryData } from '@/components/StoryCard'
-import { useTheme } from '@/lib/theme'
 import NotFound from '@/pages/NotFound'
 
 // Keyed by the id the answer belongs to, so a stale response never renders
@@ -14,7 +13,6 @@ type Result =
 
 export default function Story() {
   const { id = '' } = useParams()
-  const theme = useTheme()
   const [result, setResult] = useState<Result | null>(null)
 
   useEffect(() => {
@@ -58,7 +56,7 @@ export default function Story() {
             </p>
           )}
           {current?.kind === 'ready' && (
-            <div className={`mt-10 ${theme === 'corkboard' ? 'flex justify-center' : 'mx-auto max-w-xl'}`}>
+            <div className="mt-10 flex justify-center">
               <StoryCard story={current.story} linked={false} />
             </div>
           )}

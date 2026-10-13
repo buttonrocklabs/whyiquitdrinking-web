@@ -1,7 +1,15 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import PinsView from '@/components/PinsView'
+import ReviewTabs from '@/components/ReviewTabs'
 import { PairBlock, type Story } from '@/components/StoryCard'
 
 const STORAGE_KEY = 'wiqd_review_passphrase'
+
+type TabId = 'pending' | 'pins'
+const TABS = [
+  { id: 'pending', label: 'Pending' },
+  { id: 'pins', label: 'Pins' },
+] as const
 
 /** A pending story, with the wording its contributor agreed to (the stored consent text, one line per box). */
 type ReviewStory = Story & { agreedTo?: string[] }
@@ -30,12 +38,76 @@ async function reviewStory(
   if (!res.ok) throw new Error('review action failed')
 }
 
+interface PendingListProps {
+  stories: ReviewStory[]
+  loadError: string
+  onAction: (id: string, action: 'approve' | 'reject') => void
+}
+
+function PendingList({ stories, loadError, onAction }: PendingListProps) {
+  return (
+    <>
+      <h1 className="font-serif text-h1 text-ink">Pending stories ({stories.length})</h1>
+      {loadError && <p className="mt-4 text-body text-alert">{loadError}</p>}
+
+      {stories.length === 0 && (
+        <p className="mt-8 text-body text-ink-muted">Nothing waiting for review.</p>
+      )}
+
+      <div className="mt-8 flex flex-col gap-6">
+        {stories.map((story) => (
+          <article key={story.id} className="rounded-lg border border-line bg-surface-raised p-6">
+            {story.photoUrl && (
+              <img
+                src={story.photoUrl}
+                alt=""
+                className="mb-4 max-h-64 rounded-md object-cover"
+              />
+            )}
+            <PairBlock photos={story.photos} className="mb-4 max-w-md" />
+            <p className="whitespace-pre-line text-body text-ink">{story.storyText}</p>
+            <p className="mt-3 text-caption text-ink-muted">
+              {story.displayName || 'Anonymous'} · submitted{' '}
+              {new Date(story.submittedAt).toLocaleString()}
+            </p>
+            {story.agreedTo && story.agreedTo.length > 0 && (
+              <div className="mt-3">
+                <p className="text-caption font-semibold text-ink">Agreed to</p>
+                <ul className="mt-1 list-disc pl-5 text-caption text-ink-muted">
+                  {story.agreedTo.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <div className="mt-4 flex gap-3">
+              <button
+                onClick={() => onAction(story.id, 'approve')}
+                className="rounded-md bg-growth px-4 py-2 text-label text-on-trust hover:opacity-90"
+              >
+                Approve
+              </button>
+              <button
+                onClick={() => onAction(story.id, 'reject')}
+                className="rounded-md bg-alert px-4 py-2 text-label text-on-trust hover:opacity-90"
+              >
+                Reject
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+    </>
+  )
+}
+
 export default function Review() {
   const [passphrase, setPassphrase] = useState('')
   const [authorized, setAuthorized] = useState(false)
   const [authError, setAuthError] = useState('')
   const [stories, setStories] = useState<ReviewStory[]>([])
   const [loadError, setLoadError] = useState('')
+  const [tab, setTab] = useState<TabId>('pending')
 
   useEffect(() => {
     const saved = sessionStorage.getItem(STORAGE_KEY)
@@ -104,56 +176,13 @@ export default function Review() {
   return (
     <div className="min-h-screen bg-surface px-6 py-12">
       <div className="mx-auto max-w-3xl">
-        <h1 className="font-serif text-h1 text-ink">Pending stories ({stories.length})</h1>
-        {loadError && <p className="mt-4 text-body text-alert">{loadError}</p>}
-
-        {stories.length === 0 && (
-          <p className="mt-8 text-body text-ink-muted">Nothing waiting for review.</p>
-        )}
-
-        <div className="mt-8 flex flex-col gap-6">
-          {stories.map((story) => (
-            <article key={story.id} className="rounded-lg border border-line bg-surface-raised p-6">
-              {story.photoUrl && (
-                <img
-                  src={story.photoUrl}
-                  alt=""
-                  className="mb-4 max-h-64 rounded-md object-cover"
-                />
-              )}
-              <PairBlock photos={story.photos} className="mb-4 max-w-md" />
-              <p className="whitespace-pre-line text-body text-ink">{story.storyText}</p>
-              <p className="mt-3 text-caption text-ink-muted">
-                {story.displayName || 'Anonymous'} · submitted{' '}
-                {new Date(story.submittedAt).toLocaleString()}
-              </p>
-              {story.agreedTo && story.agreedTo.length > 0 && (
-                <div className="mt-3">
-                  <p className="text-caption font-semibold text-ink">Agreed to</p>
-                  <ul className="mt-1 list-disc pl-5 text-caption text-ink-muted">
-                    {story.agreedTo.map((line) => (
-                      <li key={line}>{line}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              <div className="mt-4 flex gap-3">
-                <button
-                  onClick={() => handleAction(story.id, 'approve')}
-                  className="rounded-md bg-growth px-4 py-2 text-label text-on-trust hover:opacity-90"
-                >
-                  Approve
-                </button>
-                <button
-                  onClick={() => handleAction(story.id, 'reject')}
-                  className="rounded-md bg-alert px-4 py-2 text-label text-on-trust hover:opacity-90"
-                >
-                  Reject
-                </button>
-              </div>
-            </article>
-          ))}
-        </div>
+        <ReviewTabs tabs={TABS} active={tab} onChange={setTab}>
+          {tab === 'pins' ? (
+            <PinsView passphrase={passphrase} />
+          ) : (
+            <PendingList stories={stories} loadError={loadError} onAction={handleAction} />
+          )}
+        </ReviewTabs>
       </div>
     </div>
   )
