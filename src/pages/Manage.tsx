@@ -223,21 +223,23 @@ export default function Manage() {
               <p className="mt-3 text-body text-ink-muted">
                 {removed
                   ? `${summary.storyRemovedOn ? `Removed on ${longDate(summary.storyRemovedOn)}. ` : ''}Nothing else is needed from you.`
-                  : 'This is your private link. From here you can remove your photos or your whole story at any time. Anyone who has this link can do the same, so keep it to yourself.'}
+                  : `This is your private link. From here you can remove ${canRemovePhotos ? 'your photos or your whole story' : 'your whole story'} at any time. Anyone who has this link can do the same, so keep it to yourself.`}
               </p>
 
               <p className="mt-6 rounded-md bg-trust-soft px-4 py-3 text-label text-ink">
                 {STATUS_LINES[summary.status]}
               </p>
 
-              {message && (
+              {photosGoneOn ? (
                 <p role="status" className="mt-4 text-body text-ink">
-                  {message}
+                  Your photos were removed on {longDate(photosGoneOn)}.
                 </p>
-              )}
-
-              {photosGoneOn && (
-                <p className="mt-4 text-body text-ink-muted">Your photos were removed on {longDate(photosGoneOn)}.</p>
+              ) : (
+                message && (
+                  <p role="status" className="mt-4 text-body text-ink">
+                    {message}
+                  </p>
+                )
               )}
 
               {summary.story && (
