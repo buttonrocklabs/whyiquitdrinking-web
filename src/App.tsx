@@ -3,6 +3,7 @@ import Home from '@/pages/Home'
 import NotFound from '@/pages/NotFound'
 import Review from '@/pages/Review'
 import Share from '@/pages/Share'
+import Story from '@/pages/Story'
 
 function App() {
   return (
@@ -11,6 +12,7 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/share" element={<Share />} />
         <Route path="/review" element={<Review />} />
+        <Route path="/stories/:id" element={<Story />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>

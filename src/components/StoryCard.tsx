@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useTheme } from '@/lib/theme'
 
 export interface Story {
@@ -8,13 +9,27 @@ export interface Story {
   submittedAt: string
 }
 
-export default function StoryCard({ story, index = 0 }: { story: Story; index?: number }) {
+interface StoryCardProps {
+  story: Story
+  index?: number
+  /** Link the byline to the story's own page. The permalink page itself turns this off. */
+  linked?: boolean
+}
+
+export default function StoryCard({ story, index = 0, linked = true }: StoryCardProps) {
   const theme = useTheme()
   const date = new Date(story.submittedAt).toLocaleDateString('en-US', {
     month: 'long',
     year: 'numeric',
   })
-  const byline = `${story.displayName || 'Anonymous'} — ${date}`
+  const bylineText = `${story.displayName || 'Anonymous'}, ${date}`
+  const byline = linked ? (
+    <Link to={`/stories/${story.id}`} className="hover:underline">
+      {bylineText}
+    </Link>
+  ) : (
+    bylineText
+  )
 
   if (theme === 'corkboard') {
     const tilt = index % 2 === 0 ? '-rotate-2' : 'rotate-2'
@@ -29,7 +44,7 @@ export default function StoryCard({ story, index = 0 }: { story: Story; index?: 
         >
           "{story.storyText}"
         </p>
-        <p className="mt-3 text-caption font-semibold text-ink-muted">— {byline}</p>
+        <p className="mt-3 text-caption font-semibold text-ink-muted">{byline}</p>
       </article>
     )
   }
