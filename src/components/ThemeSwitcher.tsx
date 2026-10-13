@@ -10,7 +10,7 @@ export default function ThemeSwitcher() {
           key={theme.id}
           type="button"
           onClick={() => setTheme(theme.id)}
-          title={`${theme.name} — ${theme.blurb}`}
+          title={`${theme.name}: ${theme.blurb}`}
           aria-label={`${theme.name} theme`}
           aria-pressed={active === theme.id}
           className={`h-6 w-6 shrink-0 overflow-hidden rounded-full border-2 transition-transform ${
