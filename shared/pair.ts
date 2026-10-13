@@ -5,6 +5,9 @@
 export const PAIR_MIN_YEAR = 2000
 export const EMAIL_MAX_CHARS = 254
 export const MAX_PHOTO_BYTES = 8 * 1024 * 1024
+// What a visitor may pick. The browser re-encodes it to a JPEG under MAX_PHOTO_BYTES
+// before upload; the function still enforces MAX_PHOTO_BYTES on what arrives.
+export const MAX_SOURCE_BYTES = 30 * 1024 * 1024
 
 export const PAIR_ERRORS = {
   both: 'Add both photos and when each was taken.',
@@ -20,6 +23,7 @@ export const PHOTO_ERRORS = {
   type: 'Please upload a JPEG, PNG or WebP photo.',
   heic: 'That photo is in HEIC format. Please export it as a JPEG and try again.',
   size: 'Photos can be up to 8MB.',
+  sourceSize: 'That photo is too large. Please choose one under 30MB.',
 } as const
 
 const TAKEN_ON = /^(\d{4})-(0[1-9]|1[0-2])$/
