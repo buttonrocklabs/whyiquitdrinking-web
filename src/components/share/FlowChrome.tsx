@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 
 /** Back button (absent on the first step, its space kept) beside a segmented progress bar. */
 export function FlowHeader({
@@ -71,6 +71,9 @@ export function FlowFooter({
   errorAction?: ReactNode
   onContinue: () => void
 }) {
+  const reasonId = useId()
+  const why = reason && disabled ? reason : ''
+
   return (
     <div className="sticky bottom-0 z-10 rounded-b-md border-t border-line bg-surface-raised px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-8 sm:pb-4">
       <div role="alert">
@@ -81,13 +84,24 @@ export function FlowFooter({
           </div>
         )}
       </div>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-4">
-        {reason && disabled && <p className="text-caption text-ink-muted sm:text-right">{reason}</p>}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end sm:gap-4">
+        {/* Always in the page, so a reason that appears or changes is read out; it takes no room while empty. */}
+        <p
+          id={reasonId}
+          aria-live="polite"
+          className={why ? 'mb-2 text-caption text-ink-muted sm:mb-0 sm:text-right' : undefined}
+        >
+          {why}
+        </p>
+        {/* aria-disabled, not disabled, so a keyboard visitor can still reach the button and hear the reason. */}
         <button
           type="button"
-          disabled={disabled}
-          onClick={onContinue}
-          className="min-h-12 w-full cursor-pointer rounded-md bg-brand px-8 py-3 text-label text-on-brand transition-colors hover:bg-brand/90 disabled:cursor-default disabled:opacity-60 sm:w-auto sm:min-w-48"
+          aria-disabled={disabled}
+          aria-describedby={why ? reasonId : undefined}
+          onClick={() => {
+            if (!disabled) onContinue()
+          }}
+          className="min-h-12 w-full cursor-pointer rounded-md bg-brand px-8 py-3 text-label text-on-brand transition-colors hover:bg-brand/90 aria-disabled:cursor-default aria-disabled:opacity-60 sm:w-auto sm:min-w-48"
         >
           {label}
         </button>

@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type DragEvent } from 'react'
+import { useEffect, useId, useRef, useState, type DragEvent } from 'react'
 import { PHOTO_ACCEPT } from '@/lib/photo'
 import PhotoThumb from './PhotoThumb'
 
@@ -30,18 +30,42 @@ export default function PhotoSlot({
   onRemove: () => void
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const addRef = useRef<HTMLButtonElement>(null)
+  const replaceRef = useRef<HTMLButtonElement>(null)
   const errorId = useId()
   const [dragging, setDragging] = useState(false)
+  // Set when the visitor adds, replaces or removes a photo here. The button they used unmounts or goes
+  // off while the photo is prepared, so once the slot settles focus moves to the button that fits.
+  const refocus = useRef(false)
+
+  // "Before" reads as "before photo"; a label that already says photo ("Your photo") is used as is.
+  const subject = /photo$/i.test(label) ? label.toLowerCase() : `${label.toLowerCase()} photo`
+
+  useEffect(() => {
+    if (cleaning || !refocus.current) return
+    refocus.current = false
+    ;(file ? replaceRef.current : addRef.current)?.focus()
+  }, [cleaning, file])
 
   function choose() {
     inputRef.current?.click()
+  }
+
+  function pickFile(picked: File) {
+    refocus.current = true
+    onFile(picked)
+  }
+
+  function remove() {
+    refocus.current = true
+    onRemove()
   }
 
   function handleDrop(event: DragEvent) {
     event.preventDefault()
     setDragging(false)
     const dropped = event.dataTransfer.files[0]
-    if (dropped && !cleaning) onFile(dropped)
+    if (dropped && !cleaning) pickFile(dropped)
   }
 
   return (
@@ -63,10 +87,12 @@ export default function PhotoSlot({
           <PhotoThumb file={file} className="h-full w-full" />
         ) : (
           <button
+            ref={addRef}
             type="button"
             onClick={choose}
             disabled={cleaning}
-            aria-label={`Add ${label.toLowerCase()} photo`}
+            // Starts with the words on the button, so the name still matches what a sighted visitor reads.
+            aria-label={`${error ? 'Choose another' : 'Add photo'}, ${label.toLowerCase()}`}
             aria-describedby={error ? errorId : undefined}
             className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 p-3 text-center"
           >
@@ -115,10 +141,23 @@ export default function PhotoSlot({
 
       {file && (
         <div className="flex gap-2">
-          <button type="button" onClick={choose} disabled={cleaning} className={`${SMALL_BUTTON} flex-1`}>
+          <button
+            ref={replaceRef}
+            type="button"
+            onClick={choose}
+            disabled={cleaning}
+            aria-label={`Replace ${subject}`}
+            className={`${SMALL_BUTTON} flex-1`}
+          >
             Replace
           </button>
-          <button type="button" onClick={onRemove} disabled={cleaning} className={`${SMALL_BUTTON} flex-1`}>
+          <button
+            type="button"
+            onClick={remove}
+            disabled={cleaning}
+            aria-label={`Remove ${subject}`}
+            className={`${SMALL_BUTTON} flex-1`}
+          >
             Remove
           </button>
         </div>
@@ -136,7 +175,7 @@ export default function PhotoSlot({
           const picked = event.target.files?.[0]
           // Cleared so choosing the same file again still counts as a change.
           event.target.value = ''
-          if (picked) onFile(picked)
+          if (picked) pickFile(picked)
         }}
       />
     </div>
