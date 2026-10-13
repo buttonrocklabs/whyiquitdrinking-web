@@ -32,5 +32,23 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
     return json({ ok: false, error: 'story not found or already reviewed' }, { status: 404 })
   }
 
+  // A rejected pair comes down: delete both photos from R2, then mark them withdrawn.
+  if (body.action === 'reject') {
+    const { results: photos } = await env.DB.prepare(
+      `SELECT r2_key FROM story_photos WHERE story_id = ? AND withdrawn_at IS NULL`
+    )
+      .bind(id)
+      .all<{ r2_key: string }>()
+
+    if (photos.length > 0) {
+      await env.MEDIA.delete(photos.map((photo) => photo.r2_key))
+      await env.DB.prepare(
+        `UPDATE story_photos SET withdrawn_at = ? WHERE story_id = ? AND withdrawn_at IS NULL`
+      )
+        .bind(new Date().toISOString(), id)
+        .run()
+    }
+  }
+
   return json({ ok: true, id, status })
 }
