@@ -2,8 +2,9 @@ import { useEffect, useId, useRef, useState, type DragEvent } from 'react'
 import { PHOTO_ACCEPT } from '@/lib/photo'
 import PhotoThumb from './PhotoThumb'
 
+// min-w-0 and the tighter padding below sm keep two buttons inside a half-width slot on a 375px phone.
 const SMALL_BUTTON =
-  'min-h-11 cursor-pointer rounded-md border border-line bg-surface-raised px-3 text-label text-ink transition-colors hover:bg-surface'
+  'min-h-11 min-w-0 cursor-pointer rounded-md border border-line bg-surface-raised px-2 text-label text-ink transition-colors hover:bg-surface sm:px-3'
 
 /**
  * One photo slot, shaped like the frame it will fill on the board. Empty it is a big tap
