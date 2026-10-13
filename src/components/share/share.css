@@ -1,0 +1,21 @@
+/* Each step of the share flow fades in. Off for visitors who ask for less motion. */
+@keyframes share-step-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.share-step-in {
+  animation: share-step-in 220ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .share-step-in {
+    animation: none;
+  }
+}
