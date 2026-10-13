@@ -20,21 +20,44 @@ function Row({ label, children, actions }: { label: string; children: ReactNode;
   )
 }
 
-function EditLink({ label, onClick, children = 'Edit' }: { label: string; onClick: () => void; children?: string }) {
+function EditLink({
+  label,
+  onClick,
+  disabled,
+  children = 'Edit',
+}: {
+  label: string
+  onClick: () => void
+  disabled: boolean
+  children?: string
+}) {
   return (
     <button
       type="button"
       aria-label={label}
+      disabled={disabled}
       onClick={onClick}
-      className="min-h-11 cursor-pointer px-2 text-label text-brand underline underline-offset-4"
+      className="min-h-11 cursor-pointer px-2 text-label text-brand underline underline-offset-4 disabled:cursor-default disabled:opacity-40"
     >
       {children}
     </button>
   )
 }
 
-/** Step 6: the visitor's own card as it will look on the board, then a short list with Edit links. */
-export default function ReviewStep({ data, onEdit }: { data: FlowData; onEdit: (step: StepId) => void }) {
+/**
+ * Step 6: the visitor's own card as it will look on the board, then a short list with Edit links.
+ * While the story is being sent the Edit links are off, so the screen cannot change under a request
+ * that already captured the answers.
+ */
+export default function ReviewStep({
+  data,
+  disabled,
+  onEdit,
+}: {
+  data: FlowData
+  disabled: boolean
+  onEdit: (step: StepId) => void
+}) {
   const mode = modeOf(data)
   const beforeUrl = useObjectUrl(mode === 'pair' ? (data.photos.before?.baked ?? null) : null)
   const afterUrl = useObjectUrl(mode === 'pair' ? (data.photos.after?.baked ?? null) : null)
@@ -78,13 +101,13 @@ export default function ReviewStep({ data, onEdit }: { data: FlowData; onEdit: (
           label="Photos"
           actions={
             mode === 'none' ? (
-              <EditLink label="Add photos" onClick={() => onEdit('photos')}>
+              <EditLink label="Add photos" disabled={disabled} onClick={() => onEdit('photos')}>
                 Add photos
               </EditLink>
             ) : (
               <>
-                <EditLink label="Edit photos" onClick={() => onEdit('photos')} />
-                <EditLink label="Reframe photos" onClick={() => onEdit('frame')}>
+                <EditLink label="Edit photos" disabled={disabled} onClick={() => onEdit('photos')} />
+                <EditLink label="Reframe photos" disabled={disabled} onClick={() => onEdit('frame')}>
                   Reframe
                 </EditLink>
               </>
@@ -95,18 +118,18 @@ export default function ReviewStep({ data, onEdit }: { data: FlowData; onEdit: (
         </Row>
 
         {mode === 'pair' && (
-          <Row label="Dates" actions={<EditLink label="Edit dates" onClick={() => onEdit('dates')} />}>
+          <Row label="Dates" actions={<EditLink label="Edit dates" disabled={disabled} onClick={() => onEdit('dates')} />}>
             Before: {monthYear(data.dates.before.year, data.dates.before.month)}. After:{' '}
             {monthYear(data.dates.after.year, data.dates.after.month)}.
           </Row>
         )}
 
-        <Row label="Story" actions={<EditLink label="Edit story" onClick={() => onEdit('story')} />}>
+        <Row label="Story" actions={<EditLink label="Edit story" disabled={disabled} onClick={() => onEdit('story')} />}>
           <span className="line-clamp-2">{data.story.trim()}</span>
           <span className="block">Shown as {name || 'Anonymous'}.</span>
         </Row>
 
-        <Row label="Visibility" actions={<EditLink label="Edit visibility" onClick={() => onEdit('privacy')} />}>
+        <Row label="Visibility" actions={<EditLink label="Edit visibility" disabled={disabled} onClick={() => onEdit('privacy')} />}>
           {visibility.map((line) => (
             <span key={line} className="block">
               {line}

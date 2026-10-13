@@ -108,6 +108,7 @@ export default function ShareFlow() {
   }
 
   function handleEdit(target: StepId) {
+    if (submitting) return
     setError('')
     flow.edit(target)
   }
@@ -141,7 +142,7 @@ export default function ShareFlow() {
           {step === 'dates' && <DatesStep data={data} onDate={flow.setDate} />}
           {step === 'story' && <StoryStep data={data} onChange={flow.patch} />}
           {step === 'privacy' && <PrivacyStep data={data} onChange={flow.patch} />}
-          {step === 'review' && <ReviewStep data={data} onEdit={handleEdit} />}
+          {step === 'review' && <ReviewStep data={data} disabled={submitting} onEdit={handleEdit} />}
         </div>
 
         <FlowFooter
