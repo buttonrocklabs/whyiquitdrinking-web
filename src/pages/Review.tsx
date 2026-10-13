@@ -1,11 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { PairBlock, type Story } from '@/components/StoryCard'
-import { CONSENT_LABELS, isUseKey, type UseKey } from '../../shared/consent'
 
 const STORAGE_KEY = 'wiqd_review_passphrase'
 
-/** A pending story, with the uses its contributor ticked. */
-type ReviewStory = Story & { uses?: string[] }
+/** A pending story, with the wording its contributor agreed to (the stored consent text, one line per box). */
+type ReviewStory = Story & { agreedTo?: string[] }
 
 async function fetchPending(passphrase: string): Promise<ReviewStory[]> {
   const res = await fetch('/api/review/pending', {
@@ -128,12 +127,12 @@ export default function Review() {
                 {story.displayName || 'Anonymous'} · submitted{' '}
                 {new Date(story.submittedAt).toLocaleString()}
               </p>
-              {story.uses && (
+              {story.agreedTo && story.agreedTo.length > 0 && (
                 <div className="mt-3">
                   <p className="text-caption font-semibold text-ink">Agreed to</p>
                   <ul className="mt-1 list-disc pl-5 text-caption text-ink-muted">
-                    {story.uses.filter(isUseKey).map((use: UseKey) => (
-                      <li key={use}>{CONSENT_LABELS[use]}</li>
+                    {story.agreedTo.map((line) => (
+                      <li key={line}>{line}</li>
                     ))}
                   </ul>
                 </div>
