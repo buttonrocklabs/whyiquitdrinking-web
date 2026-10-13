@@ -3,7 +3,6 @@ import { Link, useParams } from 'react-router-dom'
 import Footer from '@/components/Footer'
 import NavBar from '@/components/NavBar'
 import StoryCard, { type Story as StoryData } from '@/components/StoryCard'
-import { useTheme } from '@/lib/theme'
 
 type Action = 'photos' | 'story'
 /** What the server says is now true, which can differ from the action asked for (a stale tab). */
@@ -176,7 +175,6 @@ function RemoveAction({
 
 export default function Manage() {
   const { token = '' } = useParams()
-  const theme = useTheme()
   usePrivatePage()
 
   const [result, setResult] = useState<Result | null>(null)
@@ -308,7 +306,7 @@ export default function Manage() {
               {summary.story && (
                 <div className="mt-8">
                   <h2 className="font-serif text-h2 text-ink">Your story</h2>
-                  <div className={`mt-4 ${theme === 'corkboard' ? 'flex justify-center' : ''}`}>
+                  <div className="mt-4 flex justify-center">
                     <StoryCard story={summary.story} linked={false} />
                   </div>
                 </div>

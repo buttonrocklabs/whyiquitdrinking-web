@@ -7,12 +7,8 @@
  * system's 8px-based tokens (space-2/4/6/8) already line up with 1:1 —
  * no override needed there.
  *
- * Three selectable homepage themes (WIQD-4), applied via a `data-theme`
- * attribute on <html> — see src/lib/theme.ts. The base values below ARE
- * the "corkboard" theme (the default); "feed" and "archive" override the
- * same variables further down. Every theme must stay genuinely divergent
- * in color AND type, not just a recolor — see the approved canvas
- * mockups (Direction1/2/3) for the reference look of each.
+ * The site wears one look, Corkboard (WIQD-5; the Feed and Archive directions
+ * from WIQD-4 were removed). The tokens below are that look.
  */
 @theme {
   --color-surface: #f2e6d3;
@@ -32,7 +28,7 @@
   --color-alert: #8f2e2e;
   --color-alert-soft: #fde7e7;
 
-  /* font-display: the big headline/wordmark face — the most divergent token per theme */
+  /* font-display: the big headline/wordmark face */
   --font-display: "Caveat", cursive;
   --font-serif: "Fraunces", Georgia, serif;
   --font-sans: "Work Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -64,57 +60,16 @@
 }
 
 /*
- * "Feed" — dark, bold, native-social. Vertical video-feed energy even
- * though today's cards only carry text + an optional photo.
+ * Colors of the Pinterest before-and-after pin (WIQD-14), drawn on a canvas by
+ * src/lib/pinCanvas.ts, which reads these from :root. They are their own set so
+ * the pin keeps its calm cream-and-green look whatever the site looks like.
  */
-[data-theme="feed"] {
-  --color-surface: #0b0b0d;
-  --color-surface-raised: #16161a;
-  --color-line: #232323;
-  --color-line-strong: #3a3a3a;
-  --color-ink: #f5f1e8;
-  --color-ink-muted: #9b968c;
-  --color-brand: #ff7a45;
-  --color-brand-soft: #2a1d16;
-  --color-on-brand: #0b0b0d;
-  --color-growth: #6fbf94;
-  --color-growth-soft: #16241d;
-  --color-trust: #16161a;
-  --color-trust-soft: #1c1c1c;
-  --color-on-trust: #f5f1e8;
-  --color-alert: #ff6b6b;
-  --color-alert-soft: #2a1414;
-
-  --font-display: "Space Grotesk", sans-serif;
-  --font-serif: "Space Grotesk", sans-serif;
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
-
-/*
- * "Archive" — light, restrained, documentary-gallery. A curated shelf of
- * short films rather than a scrapbook or a feed.
- */
-[data-theme="archive"] {
-  --color-surface: #faf7f0;
-  --color-surface-raised: #ffffff;
-  --color-line: #e8e2d3;
-  --color-line-strong: #cabfa0;
-  --color-ink: #1d1a15;
-  --color-ink-muted: #726b5c;
-  --color-brand: #2f4a3c;
-  --color-brand-soft: #e7ede9;
-  --color-on-brand: #ffffff;
-  --color-growth: #2f4a3c;
-  --color-growth-soft: #e7ede9;
-  --color-trust: #1d1a15;
-  --color-trust-soft: #e8e2d3;
-  --color-on-trust: #faf7f0;
-  --color-alert: #8f2e2e;
-  --color-alert-soft: #fde7e7;
-
-  --font-display: "Fraunces", Georgia, serif;
-  --font-serif: "Fraunces", Georgia, serif;
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+:root {
+  --pin-surface: #faf7f0;
+  --pin-ink: #1d1a15;
+  --pin-ink-muted: #726b5c;
+  --pin-brand: #2f4a3c;
+  --pin-line: #cabfa0;
 }
 
 @layer base {

@@ -1,6 +1,5 @@
-// Draws the before-and-after pin (WIQD-14) on a browser canvas. The pin always wears the
-// Archive theme, whatever theme the moderator has active: colors are read from a hidden
-// element carrying data-theme="archive", so there is no hex in this file. Photos come from
+// Draws the before-and-after pin (WIQD-14) on a browser canvas. Colors are read from the
+// --pin-* tokens in src/index.css, so there is no hex in this file. Photos come from
 // /media on the same origin, so the canvas is never tainted and toBlob works.
 
 import { SITE_HOST, shortMonthYear } from '@/lib/pinText'
@@ -46,28 +45,20 @@ export interface PinColors {
   lineStrong: string
 }
 
-/** Reads the Archive tokens by styling a hidden element, so the pin never follows the moderator's own theme. */
+/** Reads the pin's own color tokens from :root. */
 export function readPinColors(): PinColors {
-  const probe = document.createElement('div')
-  probe.dataset.theme = 'archive'
-  probe.hidden = true
-  document.body.append(probe)
-  try {
-    const styles = getComputedStyle(probe)
-    const read = (token: string): string => {
-      const value = styles.getPropertyValue(token).trim()
-      if (!value) throw new Error(`Theme token ${token} is missing`)
-      return value
-    }
-    return {
-      surface: read('--color-surface'),
-      ink: read('--color-ink'),
-      inkMuted: read('--color-ink-muted'),
-      brand: read('--color-brand'),
-      lineStrong: read('--color-line-strong'),
-    }
-  } finally {
-    probe.remove()
+  const styles = getComputedStyle(document.documentElement)
+  const read = (token: string): string => {
+    const value = styles.getPropertyValue(token).trim()
+    if (!value) throw new Error(`Pin color ${token} is missing`)
+    return value
+  }
+  return {
+    surface: read('--pin-surface'),
+    ink: read('--pin-ink'),
+    inkMuted: read('--pin-ink-muted'),
+    brand: read('--pin-brand'),
+    lineStrong: read('--pin-line'),
   }
 }
 
