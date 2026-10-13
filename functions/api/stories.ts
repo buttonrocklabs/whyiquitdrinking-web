@@ -22,6 +22,29 @@ import {
 
 const MAX_STORY_CHARS = 4000
 
+/**
+ * The private-link email goes to whatever address the form carries, so a stranger could
+ * aim it at someone else's inbox. One address gets at most this many in any 24 hours
+ * (the submission being made counts); past that the story is still stored and the
+ * visitor still sees their link on the page, but no more mail is sent.
+ */
+const MAX_LINK_EMAILS_PER_DAY = 3
+
+/**
+ * consented_at is written from new Date().toISOString(), a fixed-width UTC string, so a
+ * plain string comparison against a cutoff of the same shape is a correct time comparison.
+ * Run after the story is stored, so the count already includes this submission.
+ */
+async function overLinkEmailCap(env: Env, email: string): Promise<boolean> {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const row = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM story_consents WHERE lower(email) = lower(?) AND consented_at >= ?`
+  )
+    .bind(email, since)
+    .first<{ n: number }>()
+  return (row?.n ?? 0) > MAX_LINK_EMAILS_PER_DAY
+}
+
 interface Upload {
   /** 'legacy' is the single optional photo on a story without a pair. */
   kind: 'legacy' | 'before' | 'after'
@@ -207,13 +230,19 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, waitUnti
   }
 
   // The private link goes to the contributor's email when one was given (a photo pair
-  // always has one). The send runs after the response and logs its own failure, so a
-  // mail problem never turns a stored story into an error.
+  // always has one). The cap check and the send both run after the response and log their
+  // own failure, so a mail problem never turns a stored story into an error. A skipped
+  // send still answers 201, so the reply never tells a caller whether mail went out.
   if (hasPair) {
     waitUntil(
-      sendEmail(env, { to: email, ...manageLinkEmail(env, manageToken) }).catch((error) =>
-        console.error('story submit: manage link email failed', error)
-      )
+      (async () => {
+        if (await overLinkEmailCap(env, email)) {
+          // No address in the log: it may belong to someone who never asked for this.
+          console.warn(`story submit: private link email skipped, over ${MAX_LINK_EMAILS_PER_DAY} per address per 24 hours`)
+          return
+        }
+        await sendEmail(env, { to: email, ...manageLinkEmail(env, manageToken) })
+      })().catch((error) => console.error('story submit: manage link email failed', error))
     )
   }
 

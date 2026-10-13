@@ -118,50 +118,72 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params, 
   // Every photo object this story ever had, pair and legacy. A key already gone from R2 counts as deleted.
   const keys = new Set(photoRows.map((photo) => photo.r2_key))
   if (row.photo_key) keys.add(row.photo_key)
-  const photosRemoved = photoRows.filter((photo) => photo.withdrawn_at === null).length + (row.photo_key ? 1 : 0)
 
   // R2 first, D1 second. If the delete throws, D1 is untouched and the same request can be retried;
   // flipping the rows first would leave the photos public with nothing pointing at them.
+  // A delete that fails part way may already have removed some objects, so the message promises no more than a retry.
   if (keys.size > 0) {
     try {
       await env.MEDIA.delete([...keys])
     } catch (error) {
       console.error('manage: photo delete failed', error)
       return json(
-        { ok: false, error: 'delete_failed', message: 'Could not remove the photos. Nothing changed, try again.' },
+        { ok: false, error: 'delete_failed', message: 'Could not remove the photos. Please try again.' },
         { status: 500, headers: PRIVATE }
       )
     }
   }
 
+  // Every update is guarded by the state it expects to change, so two removals racing each other
+  // (two tabs, a double tap) change each row once and only the one that changed it reports a change.
   const now = new Date().toISOString()
   const markPhotos = env.DB.prepare(
     `UPDATE story_photos SET withdrawn_at = ? WHERE story_id = ? AND withdrawn_at IS NULL`
   ).bind(now, row.id)
 
-  if (action === 'photos') {
-    await env.DB.batch([markPhotos, env.DB.prepare(`UPDATE stories SET photo_key = NULL WHERE id = ?`).bind(row.id)])
-  } else {
-    // The whole story: text and name blanked, email cleared. The token hash stays so the link can say "removed".
-    // story_text is NOT NULL, so it is blanked to an empty string.
-    await env.DB.batch([
-      markPhotos,
-      env.DB.prepare(
-        `UPDATE stories SET status = 'withdrawn', story_text = '', display_name = NULL, photo_key = NULL WHERE id = ?`
-      ).bind(row.id),
-      env.DB.prepare(`UPDATE story_consents SET email = NULL, withdrawn_at = ? WHERE story_id = ?`).bind(now, row.id),
-    ])
+  // By now the photo objects are already gone from R2, so a D1 failure here is retryable (the retry
+  // deletes nothing new and runs these again) but the page must not claim the removal finished.
+  let results: D1Result[]
+  try {
+    results =
+      action === 'photos'
+        ? await env.DB.batch([
+            markPhotos,
+            // The single photo of a story without a pair lives in this column.
+            env.DB.prepare(`UPDATE stories SET photo_key = NULL WHERE id = ? AND photo_key IS NOT NULL`).bind(row.id),
+          ])
+        : // The whole story: text and name blanked, email cleared. The token hash stays so the link can say "removed".
+          // story_text is NOT NULL, so it is blanked to an empty string.
+          await env.DB.batch([
+            markPhotos,
+            env.DB.prepare(
+              `UPDATE stories SET status = 'withdrawn', story_text = '', display_name = NULL, photo_key = NULL
+               WHERE id = ? AND status != 'withdrawn'`
+            ).bind(row.id),
+            env.DB.prepare(`UPDATE story_consents SET email = NULL, withdrawn_at = ? WHERE story_id = ? AND withdrawn_at IS NULL`).bind(
+              now,
+              row.id
+            ),
+          ])
+  } catch (error) {
+    // The Error only: neither the token nor its hash is in scope of the message.
+    console.error('manage: record update failed', error)
+    return json({ ok: false, error: 'record_failed' }, { status: 500, headers: PRIVATE })
   }
 
-  // Someone has to take down any pin made from this story. A photos request with no photos left
-  // (a repeat) changed nothing, so it sends nothing.
-  if (env.WITHDRAW_NOTIFY_EMAIL && (action === 'story' || photosRemoved > 0)) {
+  // Someone has to take down any pin made from this story, and only the request that actually changed
+  // something says so. A repeat, or the loser of a race, changed nothing and sends nothing.
+  const changed = (result: D1Result | undefined) => (result?.meta.changes ?? 0) > 0
+  const tookSomethingDown = action === 'story' ? changed(results[1]) : changed(results[0]) || changed(results[1])
+  if (env.WITHDRAW_NOTIFY_EMAIL && tookSomethingDown) {
     let uses: string[] = []
     try {
-      uses = JSON.parse(row.uses) as string[]
+      const parsed: unknown = JSON.parse(row.uses)
+      if (Array.isArray(parsed)) uses = parsed as string[]
     } catch {
       // An unreadable uses column still gets its notice, with the uses left out.
     }
+    const photosRemoved = (results[0]?.meta.changes ?? 0) + (row.photo_key && changed(results[1]) ? 1 : 0)
     waitUntil(
       sendEmail(env, {
         to: env.WITHDRAW_NOTIFY_EMAIL,
