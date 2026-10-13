@@ -13,6 +13,7 @@ import { bakePhotos } from './loadPhoto'
 import { buildBody, sendStory, submitProblem } from './submit'
 import { slotsOf, type Mode, type StepId } from './types'
 import { useShareFlow } from './useShareFlow'
+import { stepAtDepth, useStepHistory } from './useStepHistory'
 import { hasEntries, stepProblem } from './validate'
 
 const BAKE_ERROR = 'Something went wrong preparing a photo. Go back and choose it again.'
@@ -58,6 +59,19 @@ export default function ShareFlow() {
     window.scrollTo(0, 0)
     heading.current?.focus({ preventScroll: true })
   }, [step])
+
+  // The browser's Back button and a phone's back gesture step back through the flow. While a photo
+  // is being framed or the story is being sent they change nothing, like the in-page Back button.
+  useStepHistory({
+    step,
+    mode,
+    locked: busy || submitting,
+    done,
+    onDepth: (depth) => {
+      setError('')
+      flow.go(stepAtDepth(depth, mode))
+    },
+  })
 
   const dirty = hasEntries(data)
   useEffect(() => {
