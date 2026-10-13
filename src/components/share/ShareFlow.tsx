@@ -11,7 +11,7 @@ import ReviewStep from './ReviewStep'
 import StoryStep from './StoryStep'
 import { bakePhotos } from './loadPhoto'
 import { MISSING_PHOTO, NO_PHOTO, buildBody, sendStory, submitProblem } from './submit'
-import { slotsOf, type Mode, type StepId } from './types'
+import { slotsOf, type FlowData, type Mode, type StepId } from './types'
 import { useShareFlow } from './useShareFlow'
 import { stepAtDepth, useStepHistory } from './useStepHistory'
 import { hasEntries, stepProblem } from './validate'
@@ -107,8 +107,14 @@ export default function ShareFlow() {
     if (step === 'frame') {
       // Continue is what bakes each photo's framing into the file that gets uploaded.
       setBusy(true)
-      const baked = await bakePhotos(data, slotsOf(mode))
-      setBusy(false)
+      let baked: FlowData | null = null
+      try {
+        baked = await bakePhotos(data, slotsOf(mode))
+      } catch {
+        // Anything unexpected reads the same as a photo that could not be framed.
+      } finally {
+        setBusy(false)
+      }
       if (!baked) return setError(BAKE_ERROR)
       current = baked
       flow.patch({ photos: baked.photos })
