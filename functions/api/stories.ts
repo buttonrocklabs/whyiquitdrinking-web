@@ -1,16 +1,85 @@
-import { json, photoUrl, type Env, type StoryRow } from '../_lib'
+import {
+  CONSENT_KEYS,
+  CONSENT_LABELS,
+  CONSENT_VERSION,
+  USE_KEYS,
+  type ConsentKey,
+} from '../../shared/consent'
+import { PAIR_ERRORS, checkPair, hasPairInput } from '../../shared/pair'
+import { manageLinkEmail } from '../_emails'
+import {
+  hashToken,
+  json,
+  newManageToken,
+  photoUrl,
+  photosByStory,
+  readPhoto,
+  sendEmail,
+  type Env,
+  type PhotoRow,
+  type StoryRow,
+} from '../_lib'
 
-const MAX_PHOTO_BYTES = 8 * 1024 * 1024
 const MAX_STORY_CHARS = 4000
 
+/**
+ * The private-link email goes to whatever address the form carries, so a stranger could
+ * aim it at someone else's inbox. One address gets at most this many in any 24 hours
+ * (the submission being made counts); past that the story is still stored and the
+ * visitor still sees their link on the page, but no more mail is sent.
+ */
+const MAX_LINK_EMAILS_PER_DAY = 3
+
+/**
+ * consented_at is written from new Date().toISOString(), a fixed-width UTC string, so a
+ * plain string comparison against a cutoff of the same shape is a correct time comparison.
+ * Run after the story is stored, so the count already includes this submission.
+ */
+async function overLinkEmailCap(env: Env, email: string): Promise<boolean> {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const row = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM story_consents WHERE lower(email) = lower(?) AND consented_at >= ?`
+  )
+    .bind(email, since)
+    .first<{ n: number }>()
+  return (row?.n ?? 0) > MAX_LINK_EMAILS_PER_DAY
+}
+
+interface Upload {
+  /** 'legacy' is the single optional photo on a story without a pair. */
+  kind: 'legacy' | 'before' | 'after'
+  key: string
+  mime: string
+  bytes: ArrayBuffer
+  takenOn: string
+}
+
+/** A real file from the form, or null for a missing field or an empty file input. */
+function fileField(form: FormData, name: string): File | null {
+  const value = form.get(name)
+  return value instanceof File && value.size > 0 ? value : null
+}
+
 export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
-  const { results } = await env.DB.prepare(
-    `SELECT id, display_name, story_text, photo_key, submitted_at
-     FROM stories
-     WHERE status = 'approved'
-     ORDER BY submitted_at DESC
-     LIMIT 200`
-  ).all<Pick<StoryRow, 'id' | 'display_name' | 'story_text' | 'photo_key' | 'submitted_at'>>()
+  const [{ results }, { results: photoRows }] = await Promise.all([
+    env.DB.prepare(
+      `SELECT id, display_name, story_text, photo_key, submitted_at
+       FROM stories
+       WHERE status = 'approved'
+       ORDER BY submitted_at DESC
+       LIMIT 200`
+    ).all<Pick<StoryRow, 'id' | 'display_name' | 'story_text' | 'photo_key' | 'submitted_at'>>(),
+    // Same 200 stories as above, so the photo query never needs bound ids.
+    env.DB.prepare(
+      `SELECT story_id, kind, r2_key, taken_on
+       FROM story_photos
+       WHERE withdrawn_at IS NULL
+         AND story_id IN (
+           SELECT id FROM stories WHERE status = 'approved' ORDER BY submitted_at DESC LIMIT 200
+         )`
+    ).all<PhotoRow>(),
+  ])
+  const photos = photosByStory(photoRows)
 
   return json({
     stories: results.map((row) => ({
@@ -18,23 +87,31 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
       displayName: row.display_name,
       storyText: row.story_text,
       photoUrl: photoUrl(row.photo_key),
+      photos: photos.get(row.id) ?? [],
       submittedAt: row.submitted_at,
     })),
   })
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestPost: PagesFunction<Env> = async ({ request, env, waitUntil }) => {
   const form = await request.formData()
 
-  // Honeypot: a real visitor never fills this field (hidden off-screen).
+  // Honeypot: a real visitor never fills this field (hidden off-screen). The
+  // reply carries a token of the same shape, never stored, so it looks identical.
   if (String(form.get('website') ?? '').trim() !== '') {
-    return json({ ok: true, id: crypto.randomUUID() }, { status: 201 })
+    return json({ ok: true, id: crypto.randomUUID(), manageToken: newManageToken() }, { status: 201 })
   }
 
   const displayName = String(form.get('display_name') ?? '').trim().slice(0, 100) || null
   const storyText = String(form.get('story_text') ?? '').trim()
-  const consent = String(form.get('consent') ?? '') === 'true'
-  const photo = form.get('photo')
+  const flag = (name: string) => String(form.get(name) ?? '') === 'true'
+  const consent = flag('consent')
+  const photo = fileField(form, 'photo')
+  const beforePhoto = fileField(form, 'before_photo')
+  const afterPhoto = fileField(form, 'after_photo')
+  const beforeTakenOn = String(form.get('before_taken_on') ?? '').trim()
+  const afterTakenOn = String(form.get('after_taken_on') ?? '').trim()
+  const email = String(form.get('email') ?? '').trim()
 
   if (!storyText) {
     return json({ ok: false, error: 'story_text is required' }, { status: 400 })
@@ -46,29 +123,128 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return json({ ok: false, error: 'consent is required' }, { status: 400 })
   }
 
-  const id = crypto.randomUUID()
-  let photoKey: string | null = null
-
-  if (photo instanceof File && photo.size > 0) {
-    if (photo.size > MAX_PHOTO_BYTES) {
-      return json({ ok: false, error: 'photo must be 8MB or smaller' }, { status: 400 })
+  // Anything pair-shaped means the whole pair is required; without it, the
+  // pair-only fields (email, 18+, pins, SM board) are dropped.
+  const hasPair = hasPairInput({
+    hasBeforePhoto: beforePhoto !== null,
+    hasAfterPhoto: afterPhoto !== null,
+    beforeTakenOn,
+    afterTakenOn,
+  })
+  if (hasPair) {
+    if (photo) {
+      return json({ ok: false, error: PAIR_ERRORS.mixed }, { status: 400 })
     }
-    if (!photo.type.startsWith('image/')) {
-      return json({ ok: false, error: 'photo must be an image' }, { status: 400 })
-    }
-    const ext = photo.type.split('/')[1]?.split('+')[0] || 'jpg'
-    photoKey = `stories/${id}.${ext}`
-    await env.MEDIA.put(photoKey, await photo.arrayBuffer(), {
-      httpMetadata: { contentType: photo.type },
+    const problem = checkPair({
+      hasBeforePhoto: beforePhoto !== null,
+      hasAfterPhoto: afterPhoto !== null,
+      beforeTakenOn,
+      afterTakenOn,
+      email,
+      adult: flag('adult'),
+      now: new Date(),
     })
+    if (problem) {
+      return json({ ok: false, error: problem }, { status: 400 })
+    }
   }
 
-  await env.DB.prepare(
-    `INSERT INTO stories (id, display_name, story_text, photo_key, status, consent_given, submitted_at)
-     VALUES (?, ?, ?, ?, 'pending', 1, ?)`
-  )
-    .bind(id, displayName, storyText, photoKey, new Date().toISOString())
-    .run()
+  const id = crypto.randomUUID()
+  const submittedAt = new Date().toISOString()
 
-  return json({ ok: true, id }, { status: 201 })
+  // Check every photo before anything is stored, so a refusal leaves nothing behind.
+  const uploads: Upload[] = []
+  const candidates: [Upload['kind'], File | null, string][] = hasPair
+    ? [
+        ['before', beforePhoto, beforeTakenOn],
+        ['after', afterPhoto, afterTakenOn],
+      ]
+    : [['legacy', photo, '']]
+  for (const [kind, file, takenOn] of candidates) {
+    if (!file) continue
+    const checked = await readPhoto(file)
+    if (!checked.ok) {
+      return json({ ok: false, error: checked.error }, { status: 400 })
+    }
+    const key = kind === 'legacy' ? `stories/${id}.${checked.ext}` : `stories/${id}/${kind}.${checked.ext}`
+    uploads.push({ kind, key, mime: checked.mime, bytes: checked.bytes, takenOn })
+  }
+
+  // The server writes the consent record from its own wording, never from the client.
+  const ticked = new Set<ConsentKey>(['site'])
+  if (hasPair) {
+    ticked.add('adult')
+    if (flag('pins')) ticked.add('pins')
+    if (flag('sm_board')) ticked.add('sm_board')
+  }
+  const uses = USE_KEYS.filter((key) => ticked.has(key))
+  const consentText = CONSENT_KEYS.filter((key) => ticked.has(key))
+    .map((key) => CONSENT_LABELS[key])
+    .join('\n')
+
+  const manageToken = newManageToken()
+  const manageTokenHash = await hashToken(manageToken)
+  const legacyKey = uploads.find((upload) => upload.kind === 'legacy')?.key ?? null
+
+  try {
+    for (const upload of uploads) {
+      await env.MEDIA.put(upload.key, upload.bytes, { httpMetadata: { contentType: upload.mime } })
+    }
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO stories (id, display_name, story_text, photo_key, status, consent_given, submitted_at)
+         VALUES (?, ?, ?, ?, 'pending', 1, ?)`
+      ).bind(id, displayName, storyText, legacyKey, submittedAt),
+      env.DB.prepare(
+        `INSERT INTO story_consents
+           (story_id, email, adult_confirmed, uses, consent_text, consent_version, consented_at, manage_token_hash)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        id,
+        hasPair ? email : null,
+        hasPair ? 1 : 0,
+        JSON.stringify(uses),
+        consentText,
+        CONSENT_VERSION,
+        submittedAt,
+        manageTokenHash
+      ),
+      ...uploads
+        .filter((upload) => upload.kind !== 'legacy')
+        .map((upload) =>
+          env.DB.prepare(
+            `INSERT INTO story_photos (id, story_id, kind, r2_key, taken_on, created_at)
+             VALUES (?, ?, ?, ?, ?, ?)`
+          ).bind(crypto.randomUUID(), id, upload.kind, upload.key, upload.takenOn, submittedAt)
+        ),
+    ])
+  } catch (error) {
+    console.error('story submit failed', error)
+    // Nothing in D1 points at these objects, so none of them may be left in R2.
+    try {
+      await env.MEDIA.delete(uploads.map((upload) => upload.key))
+    } catch (cleanupError) {
+      console.error('story photo cleanup failed', cleanupError)
+    }
+    return json({ ok: false, error: 'Something went wrong. Try again.' }, { status: 500 })
+  }
+
+  // The private link goes to the contributor's email when one was given (a photo pair
+  // always has one). The cap check and the send both run after the response and log their
+  // own failure, so a mail problem never turns a stored story into an error. A skipped
+  // send still answers 201, so the reply never tells a caller whether mail went out.
+  if (hasPair) {
+    waitUntil(
+      (async () => {
+        if (await overLinkEmailCap(env, email)) {
+          // No address in the log: it may belong to someone who never asked for this.
+          console.warn(`story submit: private link email skipped, over ${MAX_LINK_EMAILS_PER_DAY} per address per 24 hours`)
+          return
+        }
+        await sendEmail(env, { to: email, ...manageLinkEmail(env, manageToken) })
+      })().catch((error) => console.error('story submit: manage link email failed', error))
+    )
+  }
+
+  return json({ ok: true, id, manageToken }, { status: 201 })
 }

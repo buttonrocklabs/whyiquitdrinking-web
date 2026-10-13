@@ -16,3 +16,40 @@ CREATE TABLE IF NOT EXISTS stories (
 
 CREATE INDEX IF NOT EXISTS idx_stories_status_submitted
   ON stories (status, submitted_at DESC);
+
+-- Before-and-after photo pair (WIQD-11). One row per photo; kind is 'before'
+-- or 'after', taken_on is YYYY-MM. withdrawn_at is set when the photo comes
+-- down (moderator reject, or the contributor withdrawing from their link).
+CREATE TABLE IF NOT EXISTS story_photos (
+  id TEXT PRIMARY KEY,
+  story_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('before', 'after')),
+  r2_key TEXT NOT NULL,
+  taken_on TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  withdrawn_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_story_photos_story
+  ON story_photos (story_id);
+
+-- Consent record, one row per story (WIQD-11). uses is a JSON array of the
+-- use keys ticked ('site', 'pins', 'sm_board'); consent_text is the exact
+-- wording shown for the ticked boxes, written server-side from
+-- shared/consent.ts. manage_token_hash is the SHA-256 hex of the private
+-- manage token; the token itself is never stored. email is null unless the
+-- story came with a photo pair.
+CREATE TABLE IF NOT EXISTS story_consents (
+  story_id TEXT PRIMARY KEY,
+  email TEXT,
+  adult_confirmed INTEGER NOT NULL DEFAULT 0,
+  uses TEXT NOT NULL,
+  consent_text TEXT NOT NULL,
+  consent_version TEXT NOT NULL,
+  consented_at TEXT NOT NULL,
+  manage_token_hash TEXT NOT NULL,
+  withdrawn_at TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_story_consents_token
+  ON story_consents (manage_token_hash);

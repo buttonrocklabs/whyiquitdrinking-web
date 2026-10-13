@@ -1,15 +1,18 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import type { Story } from '@/components/StoryCard'
+import { PairBlock, type Story } from '@/components/StoryCard'
 
 const STORAGE_KEY = 'wiqd_review_passphrase'
 
-async function fetchPending(passphrase: string): Promise<Story[]> {
+/** A pending story, with the wording its contributor agreed to (the stored consent text, one line per box). */
+type ReviewStory = Story & { agreedTo?: string[] }
+
+async function fetchPending(passphrase: string): Promise<ReviewStory[]> {
   const res = await fetch('/api/review/pending', {
     headers: { Authorization: `Bearer ${passphrase}` },
   })
   if (res.status === 401) throw new Error('unauthorized')
   if (!res.ok) throw new Error('failed to load')
-  const data = (await res.json()) as { stories: Story[] }
+  const data = (await res.json()) as { stories: ReviewStory[] }
   return data.stories
 }
 
@@ -31,7 +34,7 @@ export default function Review() {
   const [passphrase, setPassphrase] = useState('')
   const [authorized, setAuthorized] = useState(false)
   const [authError, setAuthError] = useState('')
-  const [stories, setStories] = useState<Story[]>([])
+  const [stories, setStories] = useState<ReviewStory[]>([])
   const [loadError, setLoadError] = useState('')
 
   useEffect(() => {
@@ -118,11 +121,22 @@ export default function Review() {
                   className="mb-4 max-h-64 rounded-md object-cover"
                 />
               )}
+              <PairBlock photos={story.photos} className="mb-4 max-w-md" />
               <p className="whitespace-pre-line text-body text-ink">{story.storyText}</p>
               <p className="mt-3 text-caption text-ink-muted">
                 {story.displayName || 'Anonymous'} · submitted{' '}
                 {new Date(story.submittedAt).toLocaleString()}
               </p>
+              {story.agreedTo && story.agreedTo.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-caption font-semibold text-ink">Agreed to</p>
+                  <ul className="mt-1 list-disc pl-5 text-caption text-ink-muted">
+                    {story.agreedTo.map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <div className="mt-4 flex gap-3">
                 <button
                   onClick={() => handleAction(story.id, 'approve')}
