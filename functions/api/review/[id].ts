@@ -1,4 +1,4 @@
-import { isAuthorized, json, type Env } from '../../_lib'
+import { json, reviewGate, type Env } from '../../_lib'
 
 interface ReviewAction {
   action: 'approve' | 'reject'
@@ -6,9 +6,8 @@ interface ReviewAction {
 }
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }) => {
-  if (!isAuthorized(request, env)) {
-    return json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  }
+  const denied = await reviewGate(request, env)
+  if (denied) return denied
 
   const id = String(params.id)
   const body = (await request.json()) as Partial<ReviewAction>

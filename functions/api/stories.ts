@@ -19,30 +19,53 @@ import {
   type PhotoRow,
   type StoryRow,
 } from '../_lib'
+import {
+  LINK_EMAILS_PER_ADDRESS,
+  SUBMIT_PER_IP,
+  clientIp,
+  hitLimit,
+  isOverLimit,
+  normaliseEmail,
+} from '../_ratelimit'
 
 const MAX_STORY_CHARS = 4000
 
 /**
  * The private-link email goes to whatever address the form carries, so a stranger could
- * aim it at someone else's inbox. One address gets at most this many in any 24 hours
- * (the submission being made counts); past that the story is still stored and the
- * visitor still sees their link on the page, but no more mail is sent.
+ * aim it at someone else's inbox. One address gets at most LINK_EMAILS_PER_ADDRESS.max in
+ * each 24-hour window (the submission being made counts); past that the story is still
+ * stored and the visitor still sees their link on the page, but no more mail is sent.
+ * The address is normalised first, so name+1@ and name+2@ count as one address.
  */
-const MAX_LINK_EMAILS_PER_DAY = 3
+const MAX_LINK_EMAILS_PER_DAY = LINK_EMAILS_PER_ADDRESS.max
 
 /**
- * consented_at is written from new Date().toISOString(), a fixed-width UTC string, so a
- * plain string comparison against a cutoff of the same shape is a correct time comparison.
- * Run after the story is stored, so the count already includes this submission.
+ * Run after the story is stored, so the count already includes this submission. If the
+ * counter fails the email still goes out, so a counter problem never loses a private link.
  */
 async function overLinkEmailCap(env: Env, email: string): Promise<boolean> {
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-  const row = await env.DB.prepare(
-    `SELECT COUNT(*) AS n FROM story_consents WHERE lower(email) = lower(?) AND consented_at >= ?`
-  )
-    .bind(email, since)
-    .first<{ n: number }>()
-  return (row?.n ?? 0) > MAX_LINK_EMAILS_PER_DAY
+  try {
+    const count = await hitLimit(env.DB, LINK_EMAILS_PER_ADDRESS, normaliseEmail(email))
+    return isOverLimit(count, MAX_LINK_EMAILS_PER_DAY)
+  } catch (error) {
+    console.error('story submit: link email cap check failed', error)
+    return false
+  }
+}
+
+/**
+ * Per-IP cap on stored stories (SUBMIT_PER_IP). Counted once a submission has passed
+ * validation and before anything goes to R2 or D1. If the counter itself fails the
+ * submission goes on, so a counter problem never blocks a real contributor.
+ */
+async function overSubmitCap(env: Env, request: Request): Promise<boolean> {
+  try {
+    const count = await hitLimit(env.DB, SUBMIT_PER_IP, clientIp(request))
+    return isOverLimit(count, SUBMIT_PER_IP.max)
+  } catch (error) {
+    console.error('story submit: rate limit check failed', error)
+    return false
+  }
 }
 
 interface Upload {
@@ -168,6 +191,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, waitUnti
     }
     const key = kind === 'legacy' ? `stories/${id}.${checked.ext}` : `stories/${id}/${kind}.${checked.ext}`
     uploads.push({ kind, key, mime: checked.mime, bytes: checked.bytes, takenOn })
+  }
+
+  if (await overSubmitCap(env, request)) {
+    return json(
+      { ok: false, error: 'Too many stories sent from here. Please try again in an hour.' },
+      { status: 429, headers: { 'retry-after': '3600' } }
+    )
   }
 
   // The server writes the consent record from its own wording, never from the client.

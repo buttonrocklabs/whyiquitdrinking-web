@@ -1,5 +1,5 @@
 import { isUseKey } from '../../../shared/consent'
-import { isAuthorized, json, photosByStory, type Env, type PhotoRow, type StoryRow } from '../../_lib'
+import { json, photosByStory, reviewGate, type Env, type PhotoRow, type StoryRow } from '../../_lib'
 
 type ApprovedRow = Pick<StoryRow, 'id' | 'display_name'> & {
   approved_at: string
@@ -28,9 +28,8 @@ function parseUses(stored: string | null): string[] {
 // is out), a story whose consent row has withdrawn_at set, and any photo with withdrawn_at
 // set. A story left with only one live photo has no pair, which is why pair=1 drops it.
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
-  if (!isAuthorized(request, env)) {
-    return json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  }
+  const denied = await reviewGate(request, env)
+  if (denied) return denied
 
   const pairOnly = new URL(request.url).searchParams.get('pair') === '1'
 

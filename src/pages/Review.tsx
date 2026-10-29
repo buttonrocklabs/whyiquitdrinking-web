@@ -19,6 +19,7 @@ async function fetchPending(passphrase: string): Promise<ReviewStory[]> {
     headers: { Authorization: `Bearer ${passphrase}` },
   })
   if (res.status === 401) throw new Error('unauthorized')
+  if (res.status === 429) throw new Error('locked')
   if (!res.ok) throw new Error('failed to load')
   const data = (await res.json()) as { stories: ReviewStory[] }
   return data.stories
@@ -118,7 +119,10 @@ export default function Review() {
           setAuthorized(true)
           setStories(loaded)
         })
-        .catch(() => sessionStorage.removeItem(STORAGE_KEY))
+        .catch((error) => {
+          // Keep the saved passphrase through a lockout or a network error; drop it only when it is wrong.
+          if (error instanceof Error && error.message === 'unauthorized') sessionStorage.removeItem(STORAGE_KEY)
+        })
     }
   }, [])
 
@@ -130,8 +134,12 @@ export default function Review() {
       sessionStorage.setItem(STORAGE_KEY, passphrase)
       setAuthorized(true)
       setStories(loaded)
-    } catch {
-      setAuthError('Wrong passphrase.')
+    } catch (error) {
+      setAuthError(
+        error instanceof Error && error.message === 'locked'
+          ? 'Too many tries. Please try again in 30 minutes.'
+          : 'Wrong passphrase.'
+      )
     }
   }
 
