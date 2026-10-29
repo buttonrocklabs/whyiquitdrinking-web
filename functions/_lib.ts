@@ -1,4 +1,5 @@
 import { MAX_PHOTO_BYTES, PHOTO_ERRORS } from '../shared/pair'
+import { REVIEW_FAILURES_PER_IP, clientIp, hitLimit, isLockedOut, readLimit } from './_ratelimit'
 
 export interface Env {
   DB: D1Database
@@ -118,10 +119,48 @@ export async function readPhoto(file: File): Promise<PhotoCheck> {
   return { ok: true, bytes, ...IMAGE_TYPES[kind] }
 }
 
-export function isAuthorized(request: Request, env: Env): boolean {
+/**
+ * Constant-time passphrase check. Both sides are hashed first so timingSafeEqual always
+ * compares 32 bytes and the length of the secret never shows in the timing.
+ */
+async function isAuthorized(request: Request, env: Env): Promise<boolean> {
   const header = request.headers.get('Authorization') ?? ''
   const passphrase = header.startsWith('Bearer ') ? header.slice('Bearer '.length) : ''
-  return passphrase.length > 0 && passphrase === env.REVIEW_PASSPHRASE
+  if (passphrase.length === 0 || !env.REVIEW_PASSPHRASE) return false
+  const encoder = new TextEncoder()
+  const [given, expected] = await Promise.all([
+    crypto.subtle.digest('SHA-256', encoder.encode(passphrase)),
+    crypto.subtle.digest('SHA-256', encoder.encode(env.REVIEW_PASSPHRASE)),
+  ])
+  return crypto.subtle.timingSafeEqual(given, expected)
+}
+
+/**
+ * Gate for every moderator route. Returns null when the request may go on, otherwise the
+ * response to send: 429 while the IP is locked out (checked before the passphrase is
+ * compared, so a locked IP learns nothing even with the right one), 401 for a wrong
+ * passphrase, which also counts toward the lockout. If the counter table cannot be read
+ * the check fails open and logs, so a D1 hiccup never locks moderators out.
+ */
+export async function reviewGate(request: Request, env: Env): Promise<Response | null> {
+  const ip = clientIp(request)
+  try {
+    const { current, previous } = await readLimit(env.DB, REVIEW_FAILURES_PER_IP, ip)
+    if (isLockedOut(current, previous, REVIEW_FAILURES_PER_IP.max)) {
+      return json({ ok: false, error: 'locked' }, { status: 429, headers: { 'retry-after': '1800' } })
+    }
+  } catch (error) {
+    console.error('review gate: lockout check failed', error)
+  }
+
+  if (await isAuthorized(request, env)) return null
+
+  try {
+    await hitLimit(env.DB, REVIEW_FAILURES_PER_IP, ip)
+  } catch (error) {
+    console.error('review gate: failure count failed', error)
+  }
+  return json({ ok: false, error: 'unauthorized' }, { status: 401 })
 }
 
 export function json(data: unknown, init?: ResponseInit): Response {

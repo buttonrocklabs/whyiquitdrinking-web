@@ -53,3 +53,16 @@ CREATE TABLE IF NOT EXISTS story_consents (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_story_consents_token
   ON story_consents (manage_token_hash);
+
+-- Fixed-window rate limit counters (LAB-629), see functions/_ratelimit.ts. key is
+-- bucket:sha256(ip or normalised email):window start in ms; no raw IP or address is
+-- stored. expires_at (ISO UTC) is two windows after the window start, and expired rows
+-- are swept on each hit.
+CREATE TABLE IF NOT EXISTS rate_limits (
+  key TEXT PRIMARY KEY,
+  count INTEGER NOT NULL DEFAULT 0,
+  expires_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_rate_limits_expires
+  ON rate_limits (expires_at);

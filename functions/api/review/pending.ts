@@ -1,9 +1,9 @@
 import { CONSENT_LABELS, isUseKey } from '../../../shared/consent'
 import {
-  isAuthorized,
   json,
   photoUrl,
   photosByStory,
+  reviewGate,
   type Env,
   type PhotoRow,
   type StoryRow,
@@ -26,9 +26,8 @@ function agreedTo(storedText: string | null, uses: string[]): string[] {
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
-  if (!isAuthorized(request, env)) {
-    return json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  }
+  const denied = await reviewGate(request, env)
+  if (denied) return denied
 
   const [{ results }, { results: photoRows }] = await Promise.all([
     env.DB.prepare(
