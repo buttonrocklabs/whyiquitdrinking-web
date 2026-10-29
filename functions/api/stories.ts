@@ -39,10 +39,18 @@ const MAX_STORY_CHARS = 4000
  */
 const MAX_LINK_EMAILS_PER_DAY = LINK_EMAILS_PER_ADDRESS.max
 
-/** Run after the story is stored, so the count already includes this submission. */
+/**
+ * Run after the story is stored, so the count already includes this submission. If the
+ * counter fails the email still goes out, so a counter problem never loses a private link.
+ */
 async function overLinkEmailCap(env: Env, email: string): Promise<boolean> {
-  const count = await hitLimit(env.DB, LINK_EMAILS_PER_ADDRESS, normaliseEmail(email))
-  return isOverLimit(count, MAX_LINK_EMAILS_PER_DAY)
+  try {
+    const count = await hitLimit(env.DB, LINK_EMAILS_PER_ADDRESS, normaliseEmail(email))
+    return isOverLimit(count, MAX_LINK_EMAILS_PER_DAY)
+  } catch (error) {
+    console.error('story submit: link email cap check failed', error)
+    return false
+  }
 }
 
 /**

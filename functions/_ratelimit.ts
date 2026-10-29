@@ -55,7 +55,7 @@ export function normaliseEmail(email: string): string {
   const at = lower.lastIndexOf('@')
   if (at <= 0) return lower
   let local = lower.slice(0, at)
-  let domain = lower.slice(at + 1)
+  let domain = lower.slice(at + 1).replace(/\.+$/, '')
   const plus = local.indexOf('+')
   if (plus > 0) local = local.slice(0, plus)
   if (domain === 'googlemail.com') domain = 'gmail.com'
@@ -63,9 +63,34 @@ export function normaliseEmail(email: string): string {
   return `${local}@${domain}`
 }
 
-/** The visitor's IP as Cloudflare reports it. Every request through Cloudflare has it. */
+/**
+ * The id the per-IP limits count on. IPv4 is the address as given. IPv6 is cut to its
+ * /64 prefix (first four hextets once :: is expanded), since one client usually holds a
+ * whole /64 and could otherwise rotate past the limits.
+ */
+export function ipKey(ip: string): string {
+  if (!ip.includes(':')) return ip
+  const lower = ip.toLowerCase().replace(/%.*$/, '')
+  const gap = lower.indexOf('::')
+  const head: string = gap === -1 ? lower : lower.slice(0, gap)
+  const tail: string | undefined = gap === -1 ? undefined : lower.slice(gap + 2)
+  const headParts = head ? head.split(':') : []
+  const tailParts = tail ? tail.split(':') : []
+  // An embedded IPv4 tail (::ffff:1.2.3.4) fills two hextets.
+  const width = (parts: string[]) => parts.reduce((n, part) => n + (part.includes('.') ? 2 : 1), 0)
+  const missing = tail === undefined ? 0 : Math.max(8 - width(headParts) - width(tailParts), 0)
+  const parts = [...headParts, ...Array<string>(missing).fill('0'), ...tailParts]
+  const prefix = parts.slice(0, 4).map((part) => (part.replace(/^0+/, '') || '0'))
+  while (prefix.length < 4) prefix.push('0')
+  return `${prefix.join(':')}::/64`
+}
+
+/**
+ * The visitor's IP as Cloudflare reports it, as the per-IP limits key it (IPv6 on its
+ * /64, see ipKey). Every request through Cloudflare has it.
+ */
 export function clientIp(request: Request): string {
-  return request.headers.get('CF-Connecting-IP') ?? 'unknown'
+  return ipKey(request.headers.get('CF-Connecting-IP') ?? 'unknown')
 }
 
 /** SHA-256 hex, so no raw IP or email address is written to the counter table. */
@@ -93,6 +118,15 @@ export async function hitLimit(db: D1Database, limit: Limit, id: string, nowMs =
       .bind(key, expiresAt),
   ])
   return upsert?.results[0]?.count ?? 1
+}
+
+/**
+ * Takes back one hit from the window that holds nowMs (never below zero). Pass the same
+ * nowMs that hitLimit used so the refund lands in the same row.
+ */
+export async function refundLimit(db: D1Database, limit: Limit, id: string, nowMs = Date.now()): Promise<void> {
+  const key = limitKey(limit.bucket, await hashId(id), windowStart(nowMs, limit.windowMs))
+  await db.prepare(`UPDATE rate_limits SET count = MAX(count - 1, 0) WHERE key = ?`).bind(key).run()
 }
 
 /** Counts in the current and the previous window for this id, without adding to either. */

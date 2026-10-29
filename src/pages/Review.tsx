@@ -119,7 +119,10 @@ export default function Review() {
           setAuthorized(true)
           setStories(loaded)
         })
-        .catch(() => sessionStorage.removeItem(STORAGE_KEY))
+        .catch((error) => {
+          // Keep the saved passphrase through a lockout or a network error; drop it only when it is wrong.
+          if (error instanceof Error && error.message === 'unauthorized') sessionStorage.removeItem(STORAGE_KEY)
+        })
     }
   }, [])
 
