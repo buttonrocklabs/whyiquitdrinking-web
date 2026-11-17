@@ -1,0 +1,12 @@
+{
+  "exceptions": [
+    {
+      "id": "GHSA-fc5q-39xc-vjpf",
+      "package": "picomatch",
+      "ticket": "LAB-698",
+      "added": "2026-11-17",
+      "expires": "2026-12-17",
+      "reason": "picomatch <= 4.0.7 ReDoS through single-branch repeated extglobs, published 2026-10-19. First patched version: none, and 4.0.7 is the latest release, so no bump clears it. Reaches this repo only through the build tool vite (via tinyglobby and fdir); npm audit --omit=dev is clean, and scripts/audit-gate.mjs fails the check if that ever stops being true. Same decision as LAB-697 on brl-client-tool-starter. Clears when picomatch ships a release outside <= 4.0.7: Dependabot raises that PR, then delete this entry."
+    }
+  ]
+}
