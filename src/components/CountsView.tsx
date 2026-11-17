@@ -72,7 +72,7 @@ export default function CountsView({ passphrase }: { passphrase: string }) {
             <tbody>
               {state.pins.map((row) => (
                 <tr key={row.pin} className="border-b border-line last:border-b-0">
-                  <th scope="row" className="px-4 py-3 font-normal break-all">{row.pin}</th>
+                  <th scope="row" className="px-4 py-3 font-normal whitespace-nowrap">{row.pin}</th>
                   <td className="px-4 py-3 text-right tabular-nums">{row.visits}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{row.submitted}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{row.approved}</td>
