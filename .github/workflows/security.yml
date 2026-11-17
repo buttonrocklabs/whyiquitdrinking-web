@@ -1,0 +1,58 @@
+name: Security
+# LAB-76: secret scanning + dep audit. Runs on every push/PR + weekly.
+# Findings block merges to main.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 13 * * 1" # Mondays 13:00 UTC
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: read
+
+jobs:
+  gitleaks:
+    # Install + run gitleaks directly instead of gitleaks/gitleaks-action@v2.
+    # The action's partial-scan path (`<base>^..<head>`) intermittently
+    # fails to resolve the base commit's parent on PR runs even with
+    # fetch-depth: 0 (run 25453365410 was a clean false-positive failure
+    # with "no leaks found in partial scan" + exit 1). Direct invocation
+    # also drops the Node 20 deprecation warning the action carried.
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: 8.24.3
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks
+        run: |
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /tmp gitleaks
+          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+      - name: Scan repository
+        run: gitleaks detect --redact -v --no-banner --exit-code=1
+
+  npm-audit:
+    name: npm audit (high+)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      # LAB-698: same audit as `npm audit --audit-level=high`, plus the scoped,
+      # expiring exceptions in .github/audit-exceptions.json. Any other high or
+      # critical advisory, an expired entry, or an excepted advisory that reaches
+      # the production tree still fails the job. The job name matches the Lab,
+      # VB and website repos so every repo reports the same check.
+      - name: Fail on high+ vulnerabilities (exceptions apply)
+        run: node scripts/audit-gate.mjs
