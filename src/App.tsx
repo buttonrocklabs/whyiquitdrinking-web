@@ -5,6 +5,10 @@ import NotFound from '@/pages/NotFound'
 import Review from '@/pages/Review'
 import Share from '@/pages/Share'
 import Story from '@/pages/Story'
+import { capturePin } from '@/lib/pin'
+
+// Remember a pin id from the landing URL before the first render, so the footer link already carries it.
+capturePin()
 
 function App() {
   return (

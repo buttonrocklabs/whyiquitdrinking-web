@@ -66,3 +66,19 @@ CREATE TABLE IF NOT EXISTS rate_limits (
 
 CREATE INDEX IF NOT EXISTS idx_rate_limits_expires
   ON rate_limits (expires_at);
+
+-- Per-pin event log (WIQD-17). One row per event: 'visit' (once per pin id per browser
+-- session), 'sm_click' (footer link to Sober Motivation) or 'submit' (written by the
+-- server only, with the new story id, after a successful insert). Tracking is per pin,
+-- never per person: no IP, no cookie, no user agent is stored. pin_id is 3 to 64 chars of
+-- lowercase letters, digits and hyphens (shared/pinEvents.ts). story_id is set on 'submit'.
+CREATE TABLE IF NOT EXISTS pin_events (
+  id TEXT PRIMARY KEY,
+  pin_id TEXT NOT NULL,
+  event TEXT NOT NULL,
+  story_id TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_pin_events_pin_created
+  ON pin_events (pin_id, created_at);

@@ -1,3 +1,4 @@
+import { getPin } from '@/lib/pin'
 import { checkPair, takenOnValue } from '../../../shared/pair'
 import { modeOf, type FlowData } from './types'
 
@@ -17,6 +18,8 @@ export function buildBody(data: FlowData): FormData {
   body.set('display_name', data.shareName ? data.name.trim() : '')
   body.set('story_text', data.story)
   body.set('consent', data.site ? 'true' : 'false')
+  const pin = getPin()
+  if (pin) body.set('pin_id', pin)
   if (mode === 'pair') {
     const { before, after } = data.photos
     if (before?.baked) body.set('before_photo', before.baked)

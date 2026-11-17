@@ -1,3 +1,5 @@
+import { trackSmClick, withPin } from '@/lib/pin'
+
 const SM_URL =
   'https://sobermotivation.net?utm_source=whyiquitdrinking&utm_medium=referral&utm_campaign=footer'
 
@@ -34,7 +36,7 @@ export default function Footer() {
         </p>
         <p>
           Want more support day to day?{' '}
-          <a href={SM_URL} className="underline hover:no-underline">
+          <a href={withPin(SM_URL)} onClick={trackSmClick} className="underline hover:no-underline">
             Try Sober Motivation
           </a>
           .

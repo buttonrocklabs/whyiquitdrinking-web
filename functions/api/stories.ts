@@ -5,6 +5,7 @@ import {
   USE_KEYS,
   type ConsentKey,
 } from '../../shared/consent'
+import { isPinId } from '../../shared/pinEvents'
 import { PAIR_ERRORS, checkPair, hasPairInput } from '../../shared/pair'
 import { manageLinkEmail } from '../_emails'
 import {
@@ -257,6 +258,21 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, waitUnti
       console.error('story photo cleanup failed', cleanupError)
     }
     return json({ ok: false, error: 'Something went wrong. Try again.' }, { status: 500 })
+  }
+
+  // WIQD-17: log the submit for the pin that brought this visitor, only now that the story is
+  // stored. A bad or missing pin id logs nothing; a failed log never fails the submission.
+  const pinId = form.get('pin_id')
+  if (isPinId(pinId)) {
+    try {
+      await env.DB.prepare(
+        "INSERT INTO pin_events (id, pin_id, event, story_id, created_at) VALUES (?, ?, 'submit', ?, ?)"
+      )
+        .bind(crypto.randomUUID(), pinId, id, submittedAt)
+        .run()
+    } catch (error) {
+      console.error('story submit: pin event log failed', error)
+    }
   }
 
   // The private link goes to the contributor's email when one was given (a photo pair
