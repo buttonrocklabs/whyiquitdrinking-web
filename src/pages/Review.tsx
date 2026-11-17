@@ -1,14 +1,16 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import CountsView from '@/components/CountsView'
 import PinsView from '@/components/PinsView'
 import ReviewTabs from '@/components/ReviewTabs'
 import { PairBlock, type Story } from '@/components/StoryCard'
 
 const STORAGE_KEY = 'wiqd_review_passphrase'
 
-type TabId = 'pending' | 'pins'
+type TabId = 'pending' | 'pins' | 'counts'
 const TABS = [
   { id: 'pending', label: 'Pending' },
   { id: 'pins', label: 'Pins' },
+  { id: 'counts', label: 'Counts' },
 ] as const
 
 /** A pending story, with the wording its contributor agreed to (the stored consent text, one line per box). */
@@ -187,6 +189,8 @@ export default function Review() {
         <ReviewTabs tabs={TABS} active={tab} onChange={setTab}>
           {tab === 'pins' ? (
             <PinsView passphrase={passphrase} />
+          ) : tab === 'counts' ? (
+            <CountsView passphrase={passphrase} />
           ) : (
             <PendingList stories={stories} loadError={loadError} onAction={handleAction} />
           )}
